@@ -1,0 +1,9 @@
+.import/
+bin/
+obj/
+.vs/
+artifacts/
+TestResults/
+*.user
+*.suo
+*.rsuser

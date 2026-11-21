@@ -1,0 +1,19 @@
+﻿<Application x:Class="Alondra.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="clr-namespace:Alondra.App"
+             Startup="OnStartup">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Themes/Light.xaml"/>
+        <ResourceDictionary Source="Themes/Controls.xaml"/>
+        <ResourceDictionary Source="Themes/Icons.xaml"/>
+      </ResourceDictionary.MergedDictionaries>
+      <conv:BoolToVisibilityConverter x:Key="BoolVis"/>
+      <conv:IndentConverter x:Key="IndentConverter"/>
+      <conv:NotNullToVisibilityConverter x:Key="NotNullVis"/>
+      <conv:ZeroToVisibilityConverter x:Key="ZeroVis"/>
+    </ResourceDictionary>
+  </Application.Resources>
+</Application>

@@ -1,0 +1,24 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Dark palette, designed separately rather than inverted: deep indigo-slate surfaces, the bird's light lavender for
+       text accents, its lavender-blue for fills, and peach as the warm accent. -->
+  <SolidColorBrush x:Key="ChromeBrush" Color="#16151F"/>
+  <SolidColorBrush x:Key="SurfaceBrush" Color="#1E1D2A"/>
+  <SolidColorBrush x:Key="PanelBrush" Color="#1E1D2A"/>
+  <SolidColorBrush x:Key="HeaderScrimBrush" Color="#0016151F"/>
+  <SolidColorBrush x:Key="SubtleBrush" Color="#252434"/>
+  <SolidColorBrush x:Key="TextBrush" Color="#ECEBF5"/>
+  <SolidColorBrush x:Key="MutedBrush" Color="#A4A3BE"/>         <!-- 6.9:1 on Surface -->
+  <SolidColorBrush x:Key="LineBrush" Color="#33324A"/>
+  <SolidColorBrush x:Key="HoverBrush" Color="#2A293B"/>
+  <SolidColorBrush x:Key="SelectedBrush" Color="#302F54"/>
+  <SolidColorBrush x:Key="BlueBrush" Color="#BEBFF2"/>          <!-- light wing lavender; 8.5:1 on Selected -->
+  <SolidColorBrush x:Key="BrandBrush" Color="#6C6DB0"/>
+  <SolidColorBrush x:Key="BrandDarkBrush" Color="#7E7FC2"/>     <!-- hover for brand fills: lighter on dark -->
+  <SolidColorBrush x:Key="OnBrandBrush" Color="#FFFFFF"/>
+  <SolidColorBrush x:Key="AccentWarmBrush" Color="#F4CDB9"/>    <!-- peach breast -->
+  <SolidColorBrush x:Key="DangerBrush" Color="#FF7A7A"/>
+  <SolidColorBrush x:Key="DangerSoftBrush" Color="#4A2427"/>
+  <SolidColorBrush x:Key="StarBrush" Color="#F2C14E"/>
+  <SolidColorBrush x:Key="SuccessBrush" Color="#7BD88F"/>
+</ResourceDictionary>

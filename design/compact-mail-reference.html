@@ -1,0 +1,417 @@
+<div id="compact-mail" aria-label="Windows email client design">
+  <header class="bar">
+    <strong class="app-name"><i data-lucide="mail" aria-hidden="true"></i> <span>Mail</span></strong>
+    <input type="search" aria-label="Search sample mail" placeholder="Search mail">
+    <details>
+      <summary><i data-lucide="panels-top-left" aria-hidden="true"></i> Layout</summary>
+      <div class="layout-menu">
+        <label>Folders <select id="mail-folders-dock"><option>Left</option><option>Right</option><option selected>Top</option><option>Bottom</option><option>Hidden</option></select></label>
+        <label>Reading pane <select id="mail-reader-dock"><option>Left</option><option selected>Right</option><option>Top</option><option>Bottom</option><option>Hidden</option></select></label>
+        <label>Density <select id="mail-density"><option>Compact</option><option>Comfortable</option></select></label>
+      </div>
+    </details>
+  </header>
+  <nav class="app-switcher" aria-label="Workspace">
+    <button type="button" aria-pressed="true" data-view="Mail"><i data-lucide="mail" aria-hidden="true"></i> Mail</button>
+    <button type="button" aria-pressed="false" data-view="Calendar"><i data-lucide="calendar-days" aria-hidden="true"></i> Calendar</button>
+    <button type="button" aria-pressed="false" data-view="To-do"><i data-lucide="list-todo" aria-hidden="true"></i> To-do</button>
+    <button type="button" aria-pressed="false" data-view="Notes"><i data-lucide="sticky-note" aria-hidden="true"></i> Notes</button>
+    <button type="button" aria-pressed="false" data-view="Contacts"><i data-lucide="contact" aria-hidden="true"></i> Contacts</button>
+    <button type="button" aria-pressed="false" data-view="Chat"><i data-lucide="messages-square" aria-hidden="true"></i> Chat <span class="soon">Soon</span></button>
+  </nav>
+  <div class="workspace">
+    <nav class="folders" aria-label="Accounts and folders">
+      <select id="mail-account" aria-label="Account"><option>All accounts</option><option>Work</option><option>Personal</option></select>
+      <div class="folder-buttons"></div>
+    </nav>
+    <section class="inbox" aria-label="Message list">
+      <div class="list-title"><strong>Inbox</strong><span class="visible-count" aria-live="polite"></span></div>
+      <div class="columns" aria-hidden="true"><span></span><span>From</span><span>Subject</span><span>Received</span></div>
+      <div class="messages"></div>
+    </section>
+    <article class="reader" aria-label="Reading pane">
+      <div class="reader-top"><i data-lucide="mail-open" aria-hidden="true"></i> <span class="reader-status"></span></div>
+      <h2></h2>
+      <div class="sender"></div>
+      <p class="message-body"></p>
+    </article>
+  </div>
+  <div class="organizer" hidden>
+    <section data-panel="Calendar" hidden>
+      <div class="section-head"><button type="button" class="toolbar-button" data-month="-1" aria-label="Previous month">‹</button><h2 class="month-label" aria-live="polite"></h2><button type="button" class="toolbar-button" data-month="1" aria-label="Next month">›</button></div>
+      <div class="calendar-grid" aria-label="Calendar days"></div>
+      <p class="agenda" aria-live="polite"></p>
+    </section>
+    <section data-panel="To-do" hidden>
+      <div class="section-head"><h2>My tasks</h2><span class="task-count" aria-live="polite"></span></div>
+      <div class="items">
+        <label><input type="checkbox"> Confirm the handoff owner</label>
+        <label><input type="checkbox"> Review the November invoice</label>
+        <label><input type="checkbox" checked> Send the workshop agenda</label>
+      </div>
+    </section>
+    <section data-panel="Notes" hidden>
+      <div class="section-head"><h2>My notes</h2><select class="note-picker" aria-label="Select note"><option>Friday handoff</option><option>Ideas</option></select></div>
+      <textarea class="note-editor" aria-label="Note text" rows="8"></textarea>
+    </section>
+    <section data-panel="Contacts" hidden>
+      <div class="section-head"><h2>People</h2><input class="contact-search" type="search" aria-label="Find a contact" placeholder="Find a contact"></div>
+      <ul class="contacts">
+        <li><strong>Maya Chen</strong><span>maya.chen@example.com</span></li>
+        <li><strong>Liam Weber</strong><span>liam.weber@example.com</span></li>
+        <li><strong>Ava Patel</strong><span>ava.patel@example.com</span></li>
+        <li><strong>Nora Kim</strong><span>nora.kim@example.com</span></li>
+      </ul>
+      <p class="no-contacts" hidden>No matching contacts</p>
+    </section>
+    <section data-panel="Chat" hidden>
+      <div class="section-head"><h2>Chat</h2><span class="soon">Coming later</span></div>
+    </section>
+  </div>
+</div>
+<style>
+#compact-mail {
+  color-scheme: light dark;
+  --surface: light-dark(#fff, #202124);
+  --chrome: light-dark(#f6f7f9, #282a2e);
+  --text: light-dark(#20252d, #ebeef4);
+  --muted: light-dark(#5d6674, #aab3c1);
+  --line: light-dark(#e0e4eb, #3e434b);
+  --blue: light-dark(#1556a3, #a2caff);
+  --selected: light-dark(#e6f0ff, #283e5b);
+  --hover: light-dark(#f0f3f8, #30343c);
+  --row: 26px;
+  --window-radius: 14px;
+  --pane-radius: 10px;
+  --control-radius: 7px;
+  font: 13px/1.4 "Segoe UI", sans-serif;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--window-radius);
+  background: var(--chrome);
+}
+#compact-mail * { box-sizing: border-box; }
+#compact-mail [hidden] { display: none !important; }
+#compact-mail button, #compact-mail select, #compact-mail input, #compact-mail summary { font: inherit; color: inherit; }
+#compact-mail button, #compact-mail summary { cursor: pointer; }
+#compact-mail button:focus-visible, #compact-mail summary:focus-visible, #compact-mail select:focus-visible, #compact-mail input:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+#compact-mail svg { width: 16px; height: 16px; vertical-align: -3px; }
+#compact-mail .bar { display: flex; gap: 12px; align-items: center; padding: 9px 12px 5px; }
+#compact-mail .bar strong { white-space: nowrap; }
+#compact-mail .bar strong svg { color: var(--blue); margin-right: 3px; }
+#compact-mail input, #compact-mail select, #compact-mail summary { border: 1px solid var(--line); border-radius: var(--control-radius); background: var(--surface); padding: 5px 8px; }
+#compact-mail input { flex: 1; min-width: 0; max-width: 390px; }
+#compact-mail details { position: relative; margin-left: auto; }
+#compact-mail summary { list-style: none; white-space: nowrap; }
+#compact-mail summary::-webkit-details-marker { display: none; }
+#compact-mail .layout-menu { position: absolute; z-index: 2; right: 0; top: calc(100% + 6px); width: 218px; display: grid; gap: 8px; padding: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--pane-radius); }
+#compact-mail .layout-menu label { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+#compact-mail .workspace { height: 559px; padding: 6px; }
+#compact-mail .app-switcher { display: flex; flex-wrap: wrap; gap: 3px; padding: 2px 8px 0; }
+#compact-mail .app-switcher button, #compact-mail .toolbar-button, #compact-mail .calendar-grid button { border: 0; border-radius: var(--control-radius); background: transparent; padding: 4px 8px; }
+#compact-mail .app-switcher button:hover, #compact-mail .toolbar-button:hover, #compact-mail .calendar-grid button:hover { background: var(--hover); }
+#compact-mail .app-switcher button[aria-pressed="true"], #compact-mail .calendar-grid button[aria-pressed="true"] { background: var(--selected); color: var(--blue); }
+#compact-mail .app-switcher svg { margin-right: 2px; }
+#compact-mail .soon, #compact-mail .task-count { color: var(--muted); font-size: 11px; }
+#compact-mail .soon { background: var(--hover); border-radius: var(--control-radius); padding: 2px 5px; }
+#compact-mail .organizer { padding: 6px; }
+#compact-mail .organizer section { min-height: 365px; padding: 12px; border: 1px solid var(--line); border-radius: var(--pane-radius); background: var(--surface); }
+#compact-mail .section-head { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; }
+#compact-mail .section-head h2 { margin: 0; font-size: 16px; }
+#compact-mail .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 3px; text-align: center; max-width: 650px; }
+#compact-mail .calendar-grid span { padding-block: 4px; color: var(--muted); }
+#compact-mail .calendar-grid button { min-height: 32px; background: var(--chrome); padding-inline: 2px; }
+#compact-mail .calendar-grid .has-event { font-weight: 650; box-shadow: inset 0 -2px var(--blue); }
+#compact-mail .agenda { margin-top: 12px; }
+#compact-mail .items { display: grid; gap: 4px; }
+#compact-mail .items label { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: var(--control-radius); background: var(--chrome); }
+#compact-mail .items input { flex: none; accent-color: var(--blue); }
+#compact-mail .items label:has(:checked) { text-decoration: line-through; color: var(--muted); }
+#compact-mail .note-editor { width: 100%; resize: vertical; padding: 8px; border: 1px solid var(--line); border-radius: var(--control-radius); background: var(--chrome); color: inherit; font: inherit; }
+#compact-mail .contacts { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+#compact-mail .contacts li { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 7px 8px; border-radius: var(--control-radius); background: var(--chrome); }
+#compact-mail .contacts span { color: var(--muted); overflow-wrap: anywhere; }
+#compact-mail .split { display: flex; flex: 1; gap: 6px; min-width: 0; min-height: 0; }
+#compact-mail .workspace > * { height: 100%; }
+#compact-mail .across { flex-direction: row; }
+#compact-mail .down { flex-direction: column; }
+#compact-mail :is(.folders, .inbox, .reader) { border: 1px solid var(--line); border-radius: var(--pane-radius); background: var(--surface); }
+#compact-mail .folders { padding: 8px; min-width: 0; overflow: auto; }
+#compact-mail .folders:is(.left,.right) { flex: 0 0 clamp(96px, 17%, 152px); }
+#compact-mail .folders select { width: 100%; padding-inline: 4px; }
+#compact-mail .folder-buttons { display: grid; gap: 2px; margin-top: 7px; }
+#compact-mail .folders:is(.top,.bottom) { display: flex; flex-wrap: wrap; gap: 5px 12px; align-items: center; }
+#compact-mail .folders:is(.top,.bottom) select { width: auto; }
+#compact-mail .folders:is(.top,.bottom) .folder-buttons { display: flex; flex-wrap: wrap; margin: 0; }
+#compact-mail .folder-buttons button { text-align: left; padding: 4px 7px; border-radius: var(--control-radius); }
+#compact-mail .folder-buttons button, #compact-mail .message { background: transparent; border: 0; }
+#compact-mail .folder-buttons button:hover, #compact-mail .message:hover { background: var(--hover); }
+#compact-mail .folder-buttons button[aria-pressed="true"], #compact-mail .message[aria-pressed="true"] { background: var(--selected); color: var(--text); }
+#compact-mail .inbox { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; container-type: inline-size; overflow: hidden; }
+#compact-mail .list-title { display: flex; justify-content: space-between; gap: 6px; padding: 9px 10px; align-items: center; }
+#compact-mail .visible-count { color: var(--muted); font-size: 11px; white-space: nowrap; }
+#compact-mail .columns, #compact-mail .message { display: grid; grid-template-columns: 9px minmax(0, 1fr) minmax(0, 2.55fr) 57px; gap: 7px; align-items: center; text-align: left; padding: 0 9px; }
+#compact-mail .columns { height: 24px; flex: 0 0 24px; background: var(--chrome); border-block: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+#compact-mail .messages { overflow: auto; flex: 1; }
+#compact-mail .message { min-height: var(--row); width: 100%; border-bottom: 1px solid var(--line); }
+#compact-mail .message:is(:hover, [aria-pressed="true"], :focus-visible) { border-radius: var(--control-radius); }
+#compact-mail .message span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#compact-mail .message span:last-child { text-align: right; color: var(--muted); font-size: 11px; }
+#compact-mail .message .unread { width: 6px; height: 6px; background: var(--blue); border-radius: 50%; }
+#compact-mail .message:has(.unread) .subject { font-weight: 650; }
+#compact-mail .empty { padding: 12px; color: var(--muted); }
+#compact-mail .reader { padding: 13px; overflow: auto; min-width: 0; }
+#compact-mail .reader:is(.left,.right) { flex: 0 0 clamp(142px, 34%, 330px); }
+#compact-mail .reader:is(.top,.bottom) { flex: 0 0 174px; }
+#compact-mail .reader-top { color: var(--muted); font-size: 11px; }
+#compact-mail .reader-top svg { margin-right: 3px; }
+#compact-mail .reader h2 { font-size: 17px; margin: 9px 0 5px; overflow-wrap: anywhere; }
+#compact-mail .reader .sender { color: var(--muted); }
+#compact-mail .reader p { white-space: pre-line; margin-top: 12px; }
+@container (max-width: 285px) {
+  #compact-mail .columns, #compact-mail .message { grid-template-columns: 7px minmax(0, 1fr) minmax(0, 2fr); gap: 5px; }
+  #compact-mail .columns span:last-child, #compact-mail .message span:last-child { display: none; }
+}
+@media (max-width: 510px) {
+  #compact-mail .inbox { min-width: 0; }
+  #compact-mail .folders:is(.left,.right) { flex-basis: 80px; padding-inline: 4px; }
+  #compact-mail .reader:is(.left,.right) { flex-basis: 108px; padding-inline: 8px; }
+  #compact-mail .list-title { flex-wrap: wrap; gap: 0 6px; }
+}
+</style>
+<script>
+(() => {
+  const root = document.getElementById("compact-mail");
+  const find = selector => root.querySelector(selector);
+  const workspace = find(".workspace");
+  const folders = find(".folders");
+  const inbox = find(".inbox");
+  const reader = find(".reader");
+  const list = find(".messages");
+  const folderDock = find("#mail-folders-dock");
+  const readerDock = find("#mail-reader-dock");
+  const density = find("#mail-density");
+  const account = find("#mail-account");
+  const search = find("input[type=search]");
+  const sources = [
+    ["Maya Chen", "Re: Friday handoff", "The final review is complete. I’ve updated the handoff notes with the two items we discussed.\n\nCould you confirm the owner for the remaining follow-up?\n\nThanks,\nMaya"],
+    ["Liam Weber", "Invoice for November"],
+    ["Design Team", "New navigation concepts"],
+    ["Ava Patel", "Notes from our call"],
+    ["Build Service", "Desktop build passed"],
+    ["Nora Kim", "Coffee next week?"],
+    ["Owen Clark", "Budget draft for review"],
+    ["Support", "Summary of open tickets"],
+    ["Travel Desk", "Booking confirmation"],
+    ["Lea Hoffmann", "Re: Updated timeline"],
+    ["Facilities", "Access card collection"],
+    ["Samira Ali", "Workshop agenda"],
+    ["Daniel Park", "Contract comments"],
+    ["Finance", "October expense report"],
+    ["Product Team", "Backlog review notes"],
+    ["Jamie Brooks", "Photo album link"],
+    ["Shipping", "Your order is on its way"],
+    ["Mina Torres", "Meeting moved to Tuesday"],
+    ["Ravi Shah", "Question about the prototype"],
+    ["Operations", "Weekly team update"],
+    ["Sara Jensen", "Re: Lunch on Thursday"],
+    ["IT Helpdesk", "Scheduled maintenance"],
+    ["Amir Novak", "Updated spreadsheet"],
+    ["Events", "Registration confirmed"]
+  ];
+  const mail = ["Inbox", "Sent", "Drafts", "Archive", "Trash"].flatMap((folder, group) =>
+    sources.slice(0, group === 0 ? sources.length : 7).map(([from, subject, body], i) => ({
+      id: group * 100 + i, from, subject, folder, account: i % 3 === 2 ? "Personal" : "Work",
+      time: i < 7 ? `09:${String(54 - i * 7).padStart(2, "0")}` : `Nov ${14 - Math.floor((i - 7) / 4)}`,
+      unread: group === 0 && [0, 2, 4, 7, 11, 16].includes(i),
+      body: body || `Hi,\n\nFollowing up on “${subject}.” Let me know if you have any questions.\n\nThanks,\n${from}`
+    }))
+  );
+  let folder = "Inbox";
+  let selected = null;
+  function countRows() {
+    const total = list.querySelectorAll(".message").length;
+    const row = list.querySelector(".message");
+    const count = row ? Math.min(total, Math.floor(list.clientHeight / row.offsetHeight)) : 0;
+    find(".visible-count").textContent = `${count} of ${total} visible`;
+  }
+  function updateReader() {
+    reader.querySelector("h2").textContent = selected?.subject || "No message selected";
+    find(".sender").textContent = selected ? `${selected.from} · ${selected.time}` : "";
+    find(".message-body").textContent = selected?.body || "";
+    find(".reader-status").textContent = selected ? "Available offline" : "Reading pane";
+  }
+  function updateList() {
+    const query = search.value.trim().toLowerCase();
+    const matching = mail.filter(message => message.folder === folder &&
+      (account.value === "All accounts" || account.value === message.account) &&
+      `${message.from} ${message.subject} ${message.body}`.toLowerCase().includes(query));
+    if (!matching.includes(selected)) selected = matching[0] || null;
+    find(".list-title strong").textContent = folder;
+    list.replaceChildren();
+    for (const message of matching) {
+      const row = document.createElement("button");
+      row.className = "message";
+      row.setAttribute("aria-label", `${message.unread ? "Unread, " : ""}${message.from}, ${message.subject}, ${message.time}`);
+      row.setAttribute("aria-pressed", String(message === selected));
+      for (const [index, value] of ["", message.from, message.subject, message.time].entries()) {
+        const cell = document.createElement("span");
+        cell.textContent = value;
+        if (index === 0 && message.unread) cell.className = "unread";
+        if (index === 2) cell.className = "subject";
+        row.append(cell);
+      }
+      row.onclick = () => {
+        selected = message;
+        list.querySelector('[aria-pressed="true"]')?.setAttribute("aria-pressed", "false");
+        row.setAttribute("aria-pressed", "true");
+        updateReader();
+      };
+      list.append(row);
+    }
+    if (!matching.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "No matching messages";
+      list.append(empty);
+    }
+    updateReader();
+    countRows();
+  }
+  for (const name of ["Inbox", "Sent", "Drafts", "Archive", "Trash"]) {
+    const button = document.createElement("button");
+    button.textContent = name;
+    button.setAttribute("aria-pressed", String(name === folder));
+    button.onclick = () => {
+      find('.folder-buttons [aria-pressed="true"]')?.setAttribute("aria-pressed", "false");
+      button.setAttribute("aria-pressed", "true");
+      folder = name;
+      updateList();
+    };
+    find(".folder-buttons").append(button);
+  }
+  function dock(center, pane, position) {
+    const edge = position.toLowerCase();
+    pane.classList.remove("left", "right", "top", "bottom");
+    if (edge === "hidden") return center;
+    pane.classList.add(edge);
+    const split = document.createElement("div");
+    split.className = `split ${edge === "left" || edge === "right" ? "across" : "down"}`;
+    if (edge === "left" || edge === "top") split.append(pane, center);
+    else split.append(center, pane);
+    return split;
+  }
+  function updateLayout() {
+    root.style.setProperty("--row", density.value === "Compact" ? "26px" : "34px");
+    workspace.replaceChildren(dock(dock(inbox, reader, readerDock.value), folders, folderDock.value));
+    countRows();
+  }
+  const saved = window.openai?.widgetState?.modelContent;
+  for (const [control, value] of [[folderDock, saved?.folders], [readerDock, saved?.reader], [density, saved?.density]]) {
+    if (Array.from(control.options).some(option => option.value === value)) control.value = value;
+    control.onchange = () => {
+      updateLayout();
+      window.openai?.setWidgetState?.({modelContent: {folders: folderDock.value, reader: readerDock.value, density: density.value}})?.catch(() => {});
+    };
+  }
+  search.oninput = updateList;
+  account.onchange = updateList;
+  updateLayout();
+  updateList();
+  new ResizeObserver(countRows).observe(list);
+
+  const appButtons = [...root.querySelectorAll(".app-switcher button")];
+  const panels = [...root.querySelectorAll("[data-panel]")];
+  const organizer = find(".organizer");
+  const layout = find(".bar details");
+  for (const button of appButtons) {
+    button.onclick = () => {
+      const view = button.dataset.view;
+      const isMail = view === "Mail";
+      for (const item of appButtons) item.setAttribute("aria-pressed", String(item === button));
+      for (const panel of panels) panel.hidden = panel.dataset.panel !== view;
+      find(".app-name span").textContent = view;
+      const icon = find(".app-name i, .app-name svg");
+      if (icon) icon.replaceWith(button.firstElementChild.cloneNode(true));
+      workspace.hidden = !isMail;
+      organizer.hidden = isMail;
+      search.hidden = !isMail;
+      layout.hidden = !isMail;
+      if (!isMail) layout.open = false;
+    };
+  }
+
+  let calendarDate = new Date(2026, 10, 1);
+  let chosenDay = 15;
+  const events = {16: "10:00 · Project check-in", 18: "14:00 · Design review", 24: "11:30 · Workshop"};
+  const calendar = find(".calendar-grid");
+  function renderCalendar() {
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const sampleMonth = year === 2026 && month === 10;
+    const label = new Intl.DateTimeFormat("en", {month: "long", year: "numeric"});
+    find(".month-label").textContent = label.format(calendarDate);
+    calendar.replaceChildren();
+    for (const name of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]) {
+      const weekday = document.createElement("span");
+      weekday.textContent = name;
+      calendar.append(weekday);
+    }
+    const offset = (calendarDate.getDay() + 6) % 7;
+    for (let blank = 0; blank < offset; blank++) calendar.append(document.createElement("span"));
+    const days = new Date(year, month + 1, 0).getDate();
+    for (let day = 1; day <= days; day++) {
+      const button = document.createElement("button");
+      const event = sampleMonth ? events[day] : undefined;
+      button.textContent = day;
+      button.classList.toggle("has-event", Boolean(event));
+      button.setAttribute("aria-pressed", String(day === chosenDay));
+      button.setAttribute("aria-label", event ? `${day} ${label.format(calendarDate)}, ${event}` : `${day} ${label.format(calendarDate)}`);
+      button.onclick = () => {
+        chosenDay = day;
+        calendar.querySelector('[aria-pressed="true"]')?.setAttribute("aria-pressed", "false");
+        button.setAttribute("aria-pressed", "true");
+        showAgenda();
+      };
+      calendar.append(button);
+    }
+    function showAgenda() {
+      const date = new Date(year, month, chosenDay);
+      const dayLabel = new Intl.DateTimeFormat("en", {weekday: "short", month: "short", day: "numeric"}).format(date);
+      find(".agenda").textContent = `${dayLabel} · ${(sampleMonth && events[chosenDay]) || "No events"}`;
+    }
+    showAgenda();
+  }
+  for (const button of root.querySelectorAll("[data-month]")) {
+    button.onclick = () => {
+      calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + Number(button.dataset.month), 1);
+      chosenDay = 1;
+      renderCalendar();
+    };
+  }
+  renderCalendar();
+
+  const tasks = find(".items");
+  const taskBoxes = [...tasks.querySelectorAll("input")];
+  function countTasks() {
+    find(".task-count").textContent = `${taskBoxes.filter(box => !box.checked).length} open`;
+  }
+  tasks.onchange = countTasks;
+  countTasks();
+
+  const notes = {"Friday handoff": "Confirm the owner for the follow-up.\nSend the final review notes to the team.", "Ideas": "Add keyboard shortcuts for moving between folders."};
+  const notePicker = find(".note-picker");
+  const noteEditor = find(".note-editor");
+  notePicker.onchange = () => { noteEditor.value = notes[notePicker.value]; };
+  noteEditor.oninput = () => { notes[notePicker.value] = noteEditor.value; };
+  notePicker.onchange();
+
+  const contactSearch = find(".contact-search");
+  const contacts = [...root.querySelectorAll(".contacts li")];
+  contactSearch.oninput = () => {
+    const query = contactSearch.value.trim().toLowerCase();
+    for (const contact of contacts) contact.hidden = !contact.textContent.toLowerCase().includes(query);
+    find(".no-contacts").hidden = contacts.some(contact => !contact.hidden);
+  };
+})();
+</script>
