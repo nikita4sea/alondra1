@@ -22,6 +22,7 @@ public static class Alondra1Backgrounds
         Save(Architecture(), outDir, "architecture");
         Save(WarmNeutral(), outDir, "warm-neutral");
         Save(DarkBlue(), outDir, "dark-blue");
+        Save(Ocean(), outDir, "ocean");
     }
 
     static void Save(Bitmap bmp, string dir, string name)
@@ -201,6 +202,73 @@ public static class Alondra1Backgrounds
 
             using (var foam = new Pen(C("#FFFFFF", 150), 4f))
                 g.DrawBezier(foam, -20, H * 0.80f, 500, H * 0.74f, 1200, H * 0.86f, 1960, H * 0.78f);
+        }
+
+        return Soften(bmp, 3);
+    }
+
+    /// <summary>Open sea under a hazy sky: waves grow toward the viewer and a soft sun glint lies on the water.</summary>
+    static Bitmap Ocean()
+    {
+        var bmp = new Bitmap(W, H);
+        var random = new Random(23);
+        var horizon = (int)(H * 0.40);
+        const float sunX = W * 0.68f;
+        using (var g = G(bmp))
+        {
+            // Sky, with a warm haze around the low sun.
+            Vertical(g, new Rectangle(0, 0, W, horizon), C("#8DB8DD"), C("#E3EEF4"));
+            using (var path = new GraphicsPath())
+            {
+                path.AddEllipse(sunX - 520, horizon - 420, 1040, 640);
+                using (var haze = new PathGradientBrush(path) { CenterColor = C("#FFF4DA", 170), SurroundColors = new[] { C("#FFF4DA", 0) } })
+                    g.FillPath(haze, path);
+            }
+
+            // Long, thin clouds.
+            foreach (var c in new[] { new[] { 180f, 110f, 760f, 46f }, new[] { 980f, 70f, 620f, 34f }, new[] { 520f, 230f, 900f, 40f }, new[] { 1380f, 260f, 520f, 30f } })
+                using (var path = new GraphicsPath())
+                {
+                    path.AddEllipse(c[0], c[1], c[2], c[3]);
+                    using (var cloud = new PathGradientBrush(path) { CenterColor = C("#FFFFFF", 150), SurroundColors = new[] { C("#FFFFFF", 0) } })
+                        g.FillPath(cloud, path);
+                }
+
+            // Water: hazy at the horizon, deep blue in front.
+            using (var water = new LinearGradientBrush(new Rectangle(0, horizon - 1, W, H - horizon + 2), C("#7FAACA"), C("#164E7A"), LinearGradientMode.Vertical))
+                g.FillRectangle(water, 0, horizon, W, H - horizon);
+            using (var mist = new LinearGradientBrush(new Rectangle(0, horizon - 1, W, 92), C("#E3EEF4", 200), C("#E3EEF4", 0), LinearGradientMode.Vertical))
+                g.FillRectangle(mist, 0, horizon, W, 90);
+
+            // Waves: rows get further apart, longer, and thicker toward the viewer.
+            for (var row = 0; row < 70; row++)
+            {
+                var depth = row / 69f;
+                var y = horizon + 6 + (H - horizon) * depth * depth;
+                var length = 40 + 260 * depth;
+                var width = 0.8f + 3.2f * depth;
+                for (var i = 0; i < 6 + (int)(10 * (1 - depth)); i++)
+                {
+                    var x = (float)random.NextDouble() * (W + length) - length;
+                    var dy = (float)(random.NextDouble() - 0.5) * 8 * depth;
+                    using (var trough = new Pen(C("#0E3A5E", 70), width * 1.3f))
+                        g.DrawBezier(trough, x, y + dy + width * 2, x + length * 0.3f, y + dy + width * 4, x + length * 0.7f, y + dy + width * 4, x + length, y + dy + width * 2);
+                    using (var crest = new Pen(C("#E8F3FA", 40 + (int)(50 * depth)), width))
+                        g.DrawBezier(crest, x, y + dy, x + length * 0.3f, y + dy - width * 3, x + length * 0.7f, y + dy - width * 3, x + length, y + dy);
+                }
+            }
+
+            // Sun glint: short bright dashes that widen and fade toward the viewer.
+            for (var i = 0; i < 260; i++)
+            {
+                var depth = (float)Math.Pow(random.NextDouble(), 1.6);
+                var y = horizon + 4 + (H - horizon) * depth;
+                var spread = 60 + 260 * depth;
+                var x = sunX + (float)((random.NextDouble() - 0.5) * 2 * spread * (0.4 + random.NextDouble() * 0.6));
+                var length = 10 + 70 * depth * (float)random.NextDouble();
+                using (var glint = new Pen(C("#FFF6DF", (int)(200 * (1 - depth * 0.8))), 1.5f + 3f * depth))
+                    g.DrawLine(glint, x - length / 2, y, x + length / 2, y);
+            }
         }
 
         return Soften(bmp, 3);

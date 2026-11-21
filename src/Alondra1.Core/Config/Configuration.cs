@@ -165,6 +165,7 @@ public static class BackgroundCatalog
         ("architecture", "Minimal architecture"),
         ("warm-neutral", "Warm neutral"),
         ("dark-blue", "Dark blue"),
+        ("ocean", "Ocean"),
     ];
 
     public static bool IsKnown(string? id) => id is None or Custom || BuiltIn.Any(item => item.Id == id);
