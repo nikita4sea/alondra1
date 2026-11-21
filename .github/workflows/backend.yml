@@ -1,0 +1,67 @@
+name: backend
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", "packages/api-contract/**", "compose.yaml", ".env.example", ".github/workflows/backend.yml"]
+  pull_request:
+    paths: ["backend/**", "packages/api-contract/**", "compose.yaml", ".env.example", ".github/workflows/backend.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: alondra1_test
+          POSTGRES_USER: alondra1
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U alondra1 -d alondra1_test" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+      - run: go vet ./...
+      - run: go test -race ./...
+      - name: Integration tests (PostgreSQL 17 service)
+        run: go test -race -tags integration ./internal/postgres/...
+        env:
+          ALONDRA1_TEST_DATABASE_URL: postgres://alondra1:ci-only-not-a-secret@localhost:5432/alondra1_test?sslmode=disable
+      - name: Vulnerability check
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  contract-and-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint the OpenAPI contract
+        run: npx --yes @redocly/cli@1 lint packages/api-contract/openapi.yaml
+      - name: Validate compose.yaml with throwaway secrets
+        run: |
+          cp .env.example .env
+          for f in postgres_password token_key otp_key smtp_password; do head -c 48 /dev/urandom | base64 > "secrets/$f"; done
+          docker compose config --quiet
+          # The database must never publish a host port.
+          test -z "$(docker compose config --format json | jq -r '.services.db.ports // empty')"
+      - name: Build the API image
+        run: docker build -t alondra1-api:ci backend
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

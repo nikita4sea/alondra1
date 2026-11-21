@@ -7,7 +7,7 @@ These are the rules for changing Alondra1. They protect the users' data and priv
 ## Product principles
 
 1. **Local-first.** The app must open, show local mail and tasks, and accept edits with no network connection. Online features fail gracefully: they show a status such as "Offline" and never block the window.
-2. **No Alondra1 service.** Do not add servers, telemetry, analytics, crash upload, update checks, ads, or remote configuration. Network calls go only to the accounts the user added, using the endpoints shown in their settings.
+2. **No Alondra1 service unless the user opts in.** Do not add telemetry, analytics, crash upload, update checks, ads, or remote configuration. Network calls go only to the accounts the user added, using the endpoints shown in their settings. The one exception is the optional Alondra1 cloud ([ADR 0001](decisions/0001-opt-in-cloud.md)): it is contacted only after the user explicitly connects it, never in demo mode, and the app must stay fully usable without it. The Windows app does not contact it yet.
 3. **The user's data stays theirs.** Everything Alondra1 writes is in `%LOCALAPPDATA%\alondra1`, in documented formats (SQLite, JSON, CSV, iCalendar). Exports never contain secrets.
 4. **Never lose data silently.** Before replacing data, validate the input, make a safety copy where it matters, and ask for confirmation. Prefer undo over a confirmation dialog for everyday actions.
 5. **Be honest in the UI.** Say what happened in plain words, such as "Nothing was changed" or "Sent, but the server did not confirm". Sample data is always labeled.

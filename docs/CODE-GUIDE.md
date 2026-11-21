@@ -27,6 +27,9 @@ dotnet run --project src/Alondra1.App -- --demo
 | `apps/windows/design/` | `backgrounds/` (generator for the built-in background pictures), `compact-mail-reference.html` (the mail layout reference). |
 | `docs/` | Documentation, `images/` (logo and banner), `screenshots/`. |
 | `apps/windows/artifacts/` | Build output: `win-x64/` and `Alondra1-setup.exe`. Ignored by git. |
+| `backend/` | Go cloud API (opt-in, in progress); see [backend/README.md](../backend/README.md). |
+| `packages/` | Shared API contract and task schema with fixtures; see [packages/README.md](../packages/README.md). |
+| `compose.yaml`, `.env.example`, `secrets/`, `scripts/` | Docker Compose runtime for the backend and its local secret generator ([runbook](runbooks/compose.md)). |
 
 ## Alondra1.Core
 

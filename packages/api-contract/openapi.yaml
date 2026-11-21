@@ -1,0 +1,254 @@
+openapi: 3.1.0
+info:
+  title: Alondra1 cloud API
+  version: 1.0.0-milestone-b
+  description: |
+    Optional cloud for Alondra1 (docs/BACKEND_SPEC.md, docs/decisions/0001-opt-in-cloud.md). This file is the source
+    of truth for the /v1 API. Milestone B implements health and email one-time-code authentication; the endpoints in
+    `x-alondra1-planned` are specified in the backend spec §9 and will be added here as they are implemented.
+
+    Errors are always `{"error": {"code", "message", "request_id"}}` with a stable `code`. Every response carries
+    `X-Request-ID` and `Cache-Control: no-store`. Request bodies are JSON (`application/json`), at most 16 KiB, with
+    unknown fields rejected.
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local Docker Compose (development only; production requires TLS)
+tags:
+  - name: health
+  - name: auth
+  - name: account
+paths:
+  /v1/health/live:
+    get:
+      tags: [health]
+      operationId: healthLive
+      summary: Process liveness
+      security: []
+      responses:
+        "200":
+          description: The process is running.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Status" } } }
+  /v1/health/ready:
+    get:
+      tags: [health]
+      operationId: healthReady
+      summary: Readiness (database reachable)
+      security: []
+      responses:
+        "200":
+          description: Ready to serve.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Status" } } }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/auth/email/start:
+    post:
+      tags: [auth]
+      operationId: authEmailStart
+      summary: Email a 6-digit sign-in code
+      description: |
+        Always returns the same shape whether or not an account exists (no enumeration). A new code invalidates older
+        unused codes for the address. Limits: one request per 60 s per address, 5 per hour per address, plus per-IP and
+        global limits.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+      responses:
+        "202":
+          description: A code was sent (or would have been, for any address).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [challenge_id, expires_in_seconds, resend_after_seconds]
+                properties:
+                  challenge_id: { type: string, format: uuid }
+                  expires_in_seconds: { type: integer, const: 600 }
+                  resend_after_seconds: { type: integer, const: 60 }
+        "400": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/auth/email/verify:
+    post:
+      tags: [auth]
+      operationId: authEmailVerify
+      summary: Verify the code; sign in, creating the account on first use
+      description: |
+        Codes are valid for 10 minutes, once, with at most 5 attempts per challenge. Signing in never joins a space.
+        Every failure returns the same `INVALID_CODE`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, code, challenge_id]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+                challenge_id: { type: string, format: uuid }
+                device:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    name: { type: string, maxLength: 100, description: Display name, e.g. "Maya's laptop". }
+                    platform: { type: string, enum: [windows, android, ios, other] }
+      responses:
+        "200":
+          description: Signed in.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Tokens"
+                  - type: object
+                    required: [user]
+                    properties:
+                      user:
+                        type: object
+                        required: [id, email]
+                        properties:
+                          id: { type: string, format: uuid }
+                          email: { type: string, format: email }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "415": { $ref: "#/components/responses/Error" }
+  /v1/auth/refresh:
+    post:
+      tags: [auth]
+      operationId: authRefresh
+      summary: Rotate the refresh token
+      description: |
+        Returns new tokens and invalidates the presented refresh token. Presenting an already rotated token is treated
+        as theft: every session of that sign-in is revoked and `REFRESH_REUSED` is returned.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string, pattern: "^a1r_[A-Za-z0-9_-]{43}$" }
+      responses:
+        "200":
+          description: New tokens.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Tokens" } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+  /v1/auth/logout:
+    post:
+      tags: [auth]
+      operationId: authLogout
+      summary: End this device's sign-in
+      responses:
+        "204": { description: Signed out on this device. }
+        "401": { $ref: "#/components/responses/Error" }
+  /v1/auth/logout-all:
+    post:
+      tags: [auth]
+      operationId: authLogoutAll
+      summary: End every sign-in of the account on every device
+      responses:
+        "204": { description: Signed out everywhere. }
+        "401": { $ref: "#/components/responses/Error" }
+  /v1/me:
+    get:
+      tags: [account]
+      operationId: getMe
+      summary: The signed-in account and its spaces
+      responses:
+        "200":
+          description: Profile. `memberships` stays empty until spaces exist (Milestone C).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, email, created_at, memberships]
+                properties:
+                  id: { type: string, format: uuid }
+                  email: { type: string, format: email }
+                  created_at: { type: string, format: date-time }
+                  memberships: { type: array, items: { type: object } }
+        "401": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: Access token from verify or refresh; valid 15 minutes.
+  schemas:
+    Status:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok, ready] }
+    Tokens:
+      type: object
+      required: [token_type, access_token, access_token_expires_at, refresh_token, refresh_token_expires_at, session]
+      properties:
+        token_type: { const: Bearer }
+        access_token: { type: string, description: Short-lived (15 min). Keep in memory. }
+        access_token_expires_at: { type: string, format: date-time }
+        refresh_token:
+          type: string
+          description: Opaque, rotating, 30 days. Store only in the OS credential store (Windows DPAPI / Credential Manager, Android Keystore, iOS Keychain), never in config files or exports.
+        refresh_token_expires_at: { type: string, format: date-time }
+        session:
+          type: object
+          required: [id, device_id]
+          properties:
+            id: { type: string, format: uuid }
+            device_id: { type: string, format: uuid }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              description: Stable machine-readable code.
+              enum: [NOT_FOUND, MALFORMED_JSON, UNSUPPORTED_MEDIA_TYPE, BODY_TOO_LARGE, INVALID_EMAIL, RATE_LIMITED,
+                     EMAIL_DELIVERY_FAILED, INVALID_CODE, REFRESH_INVALID, REFRESH_REUSED, UNAUTHENTICATED, NOT_READY, INTERNAL]
+            message: { type: string }
+            request_id: { type: string }
+  responses:
+    Error:
+      description: Error with a stable code.
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    RateLimited:
+      description: Too many requests.
+      headers:
+        Retry-After: { schema: { type: integer }, description: Seconds to wait. }
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+security:
+  - bearer: []
+x-alondra1-planned:
+  milestone-c: [POST /v1/tenants, GET /v1/tenants, GET /v1/tenants/{id}, PATCH /v1/tenants/{id}, DELETE /v1/tenants/{id},
+                GET /v1/tenants/{id}/members, POST /v1/tenants/{id}/invites, POST /v1/invites/{token}/accept,
+                DELETE /v1/tenants/{id}/invites/{invite_id}, DELETE /v1/tenants/{id}/members/{user_id},
+                POST /v1/devices, GET /v1/devices, DELETE /v1/devices/{id}, DELETE /v1/me]
+  milestone-d: [GET /v1/tasks, POST /v1/tasks, GET /v1/tasks/{id}, PATCH /v1/tasks/{id}, DELETE /v1/tasks/{id},
+                GET /v1/tasks/completion-history, GET /v1/task-lists, POST /v1/task-lists, GET /v1/task-lists/{id},
+                PATCH /v1/task-lists/{id}, DELETE /v1/task-lists/{id}, GET /v1/list-groups, POST /v1/list-groups,
+                GET /v1/list-groups/{id}, PATCH /v1/list-groups/{id}, DELETE /v1/list-groups/{id},
+                GET /v1/config/user/{namespace}, PUT /v1/config/user/{namespace}, PATCH /v1/config/user/{namespace},
+                GET /v1/config/tenant/{namespace}, PUT /v1/config/tenant/{namespace}, PATCH /v1/config/tenant/{namespace},
+                GET /v1/data/export]
+  milestone-e: [GET /v1/sync/bootstrap, GET /v1/sync/changes, POST /v1/sync/push]

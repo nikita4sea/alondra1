@@ -11,6 +11,24 @@ This is the release history, with what was verified for each release and what wa
 
 **Test machine:** one PC running Windows build 10.0.26300 (DisplayVersion 26H2). That is the only OS any release was launched on.
 
+## Unreleased: monorepo and cloud backend, Milestones A and B (2026-11-21)
+
+Work toward the optional cloud in [BACKEND_SPEC.md](BACKEND_SPEC.md). The Windows app does not use the backend yet, and nothing here is production-ready.
+
+- **Monorepo (Milestone A):**
+  - The Windows app moved to `apps/windows` with history-preserving moves. Its paths, the Inno Setup `AppId`, and the `%LOCALAPPDATA%\alondra1` data folder are unchanged.
+  - Decisions: [0001 opt-in cloud](decisions/0001-opt-in-cloud.md) and [0002 local/cloud task boundary](decisions/0002-local-cloud-task-boundary.md).
+  - Shared contract: `packages/api-contract/schemas/todo-v1.schema.json`, generated from `TodoModels.cs`, plus a golden fixture written by the Windows serializer. `TodoTask.SubtaskProgress` is no longer written to JSON exports. It was a derived value that serialized as an empty object and was ignored on import.
+  - `compose.yaml` (API + PostgreSQL 17 on an internal network, no database port, localhost-only API, optional mailpit), `.env.example`, `secrets/` (ignored), `scripts/new-dev-secrets.ps1`, and CI workflows.
+  - Android and iOS are placeholders only.
+- **Backend (Milestone B):** Go API with secret-file configuration, database retry, forward-only migrations, SMTP delivery, and email one-time-code sign-in with rotating refresh tokens and reuse detection. See [backend/README.md](../backend/README.md).
+- **Verified:**
+  - Windows, from `apps/windows`: 119 passed, 1 skipped (the opt-in 10 GB mailbox test). This includes 16 new contract tests.
+  - Backend: `go vet` clean. Unit tests pass for configuration, sign-in rules (expiry, attempts, replay, supersession, cooldown and hourly, per-IP and global limits, rotation and reuse, logout), the HTTP error contract, log redaction, OpenAPI routing, and SMTP against an in-process server.
+  - Integration tests against a real PostgreSQL 17 (embedded) cover migrations, downgrade refusal, the store contract including concurrent one-time consumption, and the full sign-in flow.
+  - The built API binary was started against PostgreSQL: it applied the migration, served `/v1/health/live` and `/v1/health/ready`, returned `503 EMAIL_DELIVERY_FAILED` with no reachable SMTP server, and logged the address only redacted.
+- **Not verified:** Docker is not installed on the build machine, so `docker compose config`, the API image build, the CI workflows, and email delivery through mailpit or a real relay have not been run. The OpenAPI file has not been linted (no Node.js here). CI does both.
+
 ## Unreleased: spacing, alignment, and workspace tabs (2026-11-21)
 
 - **Spacing contract:** the toolbar and content are inset 10 px from the window; header → toolbar → content gaps are 8 px; Mail panes have exactly one 8 px gutter (the splitter hit target) and 16 px inner padding. Values are tokens in `Themes/Controls.xaml`; see [UI-DESIGN.md](UI-DESIGN.md#spacing-contract).

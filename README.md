@@ -60,6 +60,11 @@ dotnet run --project src/Alondra1.App -- --demo     # try it with sample data
 | [To-do](docs/TODO.md) | The local task engine in depth: entities, storage, behavior, formats, shortcuts. |
 | [OAuth setup](docs/OAUTH-SETUP.md) | Registering Microsoft and Google clients. |
 | [Delivery notes](docs/DELIVERY-NOTES.md) | Release history and what was verified. |
+| [Backend spec](docs/BACKEND_SPEC.md) | The optional cloud (in progress): [decisions](docs/decisions), [Compose runbook](docs/runbooks/compose.md), [API](backend/README.md), [shared contract](packages/README.md). |
+
+## Repository
+
+This is a monorepo. The Windows app is in [`apps/windows`](apps/windows). The optional cloud API is in [`backend`](backend) (Go, PostgreSQL, Docker Compose); it provides sign-in only so far, and the Windows app does not use it yet. [`packages`](packages) holds the API contract and the task schema shared by all clients.
 
 ## Logo
 

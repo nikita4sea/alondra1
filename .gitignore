@@ -7,3 +7,13 @@ TestResults/
 *.user
 *.suo
 *.rsuser
+
+# Docker Compose: local settings and runtime secrets never go to git.
+.env
+secrets/*
+!secrets/.gitkeep
+
+# Go
+backend/bin/
+*.test
+coverage.out

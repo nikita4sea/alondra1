@@ -6,9 +6,23 @@ Alondra1 is a Windows desktop app (WPF, .NET 10) for mail, calendar, tasks, note
 
 - Settings, the local mail copy, local tasks, and credentials live in one folder in the user's profile.
 - Nothing is sent anywhere except to the mail and organizer accounts the user adds.
-- There is no Alondra1 server, telemetry, or cloud sync.
+- There is no telemetry. The Windows app does not contact any Alondra1 server.
+
+An **optional cloud** is being built in the same repository ([ADR 0001](decisions/0001-opt-in-cloud.md), [backend spec](BACKEND_SPEC.md)): a Go API with PostgreSQL in [`backend/`](../backend), sharing the task contract in [`packages/`](../packages). So far it provides email one-time-code sign-in only (Milestone B); the Windows app is not connected to it. See [Repository layout](#repository-layout) and [Cloud backend](#cloud-backend-in-progress).
 
 This page explains how the code is organized and how data moves through it. [CODE-GUIDE.md](CODE-GUIDE.md) is the file-by-file reference, and [GUIDELINES.md](GUIDELINES.md) has the rules for changing it.
+
+## Repository layout
+
+| Path | Contents |
+| --- | --- |
+| `apps/windows/` | The Windows app: `Alondra1.slnx`, `src/`, `tests/`, `installer/`, `design/`. Everything below this section is about it. |
+| `apps/android/`, `apps/ios/` | Placeholders; not started. |
+| `backend/` | Go API (cloud, opt-in). |
+| `packages/api-contract/` | OpenAPI contract and the task JSON Schema shared by all clients and the backend. |
+| `packages/shared-models/` | Golden fixtures written by the Windows serializer. |
+| `compose.yaml`, `.env.example`, `secrets/` | Docker Compose runtime for the backend (development); secrets are local files, never committed. |
+| `docs/` | Documentation, decisions (`decisions/`), runbooks (`runbooks/`). |
 
 ## Projects
 
@@ -178,6 +192,15 @@ The installer puts the program in `%LOCALAPPDATA%\Programs\Alondra1`. It never t
 - Libraries use `async` with `ConfigureAwait(false)`. The App resumes on the UI thread, so view-model state, `TaskBoard` changes, and `Changed` events all happen on the dispatcher.
 - Sync for each account is serialized. Different accounts can sync in parallel.
 - Expected failures (network, authentication, storage) become a status, such as "Offline" or "Sync failed", or a readable alert. An unhandled exception is written to `logs\crash.txt` and shown once before the app closes.
+
+## Cloud backend (in progress)
+
+The backend is a stateless Go HTTP API with PostgreSQL, run with Docker Compose for now ([runbook](runbooks/compose.md)). It is a separate implementation; the Windows app stays C#/WPF and keeps working without it.
+
+- **Implemented (Milestone B):** configuration from secret files only; PostgreSQL connection with retry and forward-only migrations (advisory lock, downgrade refusal); SMTP delivery; email one-time-code sign-in; 15-minute access tokens; rotating 30-day refresh tokens per device with reuse detection; logout and logout-all; audit log. Details: [backend/README.md](../backend/README.md).
+- **Next:** spaces (Personal, Family, Organization) with roles and invitations (C); task and portable-settings CRUD with tenant isolation (D); outbox sync with bootstrap, change cursor, and conflicts (E); operational readiness (F).
+- **Boundary with local tasks:** [ADR 0002](decisions/0002-local-cloud-task-boundary.md). `TaskBoard` stays the only task writer; a separate cloud adapter project will talk to the API; mail, calendar, contacts, provider notes, account tasks, and secrets are never uploaded.
+- **Contract:** [openapi.yaml](../packages/api-contract/openapi.yaml) and [todo-v1.schema.json](../packages/api-contract/schemas/todo-v1.schema.json). Tests on both sides fail when code and contract disagree.
 
 ## Build and packaging
 
