@@ -11,6 +11,17 @@ This is the release history, with what was verified for each release and what wa
 
 **Test machine:** one PC running Windows build 10.0.26300 (DisplayVersion 26H2). That is the only OS any release was launched on.
 
+## Unreleased: spacing, alignment, and workspace tabs (2026-11-21)
+
+- **Spacing contract:** the toolbar and content are inset 10 px from the window; header → toolbar → content gaps are 8 px; Mail panes have exactly one 8 px gutter (the splitter hit target) and 16 px inner padding. Values are tokens in `Themes/Controls.xaml`; see [UI-DESIGN.md](UI-DESIGN.md#spacing-contract).
+- **Alignment:** account selector, status chip, and folder tabs share one 36 px height and center line, with 16 px between groups. The list's title row and the reader's status row are both 48 px. From / Subject / Received share their columns with the message rows, also when the scroll bar shows. Selected tabs no longer turn bold, so they keep their size.
+- **Workspace tabs:** Mail, Calendar, To-do, Notes, Contacts, and Chat are rounded, browser-style tabs in the header. Labels hide below 1200 px, search collapses below 860 px, and modules overflow below 720 and 560 px.
+- **Also in this build:** delete an account (Settings → Accounts → Delete) and the Ocean background.
+- **Verified:**
+  - `dotnet test Alondra1.slnx`: 103 passed, 1 skipped. New tests cover the spacing and tab tokens, the shell rows, shared mail columns, tab styles without geometry changes, and one 8 px gutter in all 25 dock combinations.
+  - Demo snapshots of Mail at 1400 px (light and dark), and in dark at 1199, 1120, 860, 760, 700, 640, 560, and 470 px; To-do (light) and Calendar (dark) at 1400 px.
+  - Not checked: display scaling other than 100%, maximize/restore, and a screen reader. At about 470 px the Mail folder selector is still partly covered by New.
+
 ## 1.3.0: Alondra1 everywhere (2026-11-21)
 
 - **Naming:** every identifier now uses the Alondra1 name.

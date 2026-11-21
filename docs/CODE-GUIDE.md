@@ -86,6 +86,7 @@ Plain .NET with no I/O. Everything here can be unit-tested directly.
 | `ThemeService.cs` | Applies Light or Dark tokens and custom colors, and makes panels translucent when a background is on. |
 | `Converters.cs` | Value converters used by the XAML. |
 | `Controls/Alondra1Icon.cs` | The icon element (`Kind`, `IconSize`). |
+| `Controls/MailColumns.cs` | The one column layout shared by the mail column header and message rows (`ui:MailColumns.Apply`). |
 | `Shell/MailDockPanel.cs` | The panel that hosts the folders, list, and reader, using `LayoutArranger`. |
 | `Shell/BackgroundService.cs` | Loads, processes, imports, and deletes background pictures. |
 | `Shell/BackgroundEditor.cs` | The Background section of Settings. |

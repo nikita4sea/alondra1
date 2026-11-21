@@ -203,16 +203,17 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     public void SetShellWidth(double width)
     {
-        ShowNavLabels = width >= 1120;
+        // Breakpoints follow the width of the workspace tab strip (docs/UI-DESIGN.md → Responsive behavior).
+        ShowNavLabels = width >= 1200;
         ShowWordmark = width >= 640;
-        CompactSearch = width < 720;
+        CompactSearch = width < 860;
         ShowStatusLabel = width >= 1240;
         ShowSecondaryMailActions = width >= 1040;
         ShowFolderLabels = width >= 960;
         FolderTabsAsCombo = width < 760;
         ShowNewLabel = width >= 560;
-        string[] overflow = width < 470 ? ["Calendar", "To-do", "Notes", "Contacts", "Chat"]
-            : width < 600 ? ["Notes", "Contacts", "Chat"]
+        string[] overflow = width < 560 ? ["Calendar", "To-do", "Notes", "Contacts", "Chat"]
+            : width < 720 ? ["Notes", "Contacts", "Chat"]
             : [];
         foreach (var workspace in Workspaces)
             workspace.InOverflow = overflow.Contains(workspace.Name) && !workspace.IsSelected;

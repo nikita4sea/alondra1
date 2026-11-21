@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using System.Windows.Media;
 using System.Xml.Linq;
 using Alondra1.Core.Config;
+using Alondra1.Core.Layout;
 
 namespace Alondra1.Tests;
 
@@ -21,13 +22,20 @@ public class UiDesignTests
     {
         var window = XDocument.Load(Path.Combine(App, "MainWindow.xaml"));
         var rootGrid = window.Root!.Element(Wpf + "Border")!.Element(Wpf + "Grid")!;
-        var rows = rootGrid.Element(Wpf + "Grid.RowDefinitions")!.Elements(Wpf + "RowDefinition").ToList();
-        Assert.Equal(3, rows.Count);
-        Assert.Equal("*", (string?)rows[2].Attribute("Height"));
+        var rows = rootGrid.Element(Wpf + "Grid.RowDefinitions")!.Elements(Wpf + "RowDefinition").Select(row => (string?)row.Attribute("Height")).ToList();
+        // Header, 8 px gap, toolbar, 8 px gap, content: the two gap rows are spacing, not extra chrome rows.
+        Assert.Equal(["Auto", "{StaticResource ShellSurfaceGapRow}", "Auto", "{StaticResource ShellSurfaceGapRow}", "*"], rows);
         var header = rootGrid.Elements(Wpf + "Grid").Single(element => (string?)element.Attribute(Xaml + "Name") == "Header");
         var toolbar = rootGrid.Elements(Wpf + "Border").Single(element => (string?)element.Attribute(Xaml + "Name") == "Toolbar");
         Assert.Equal("0", (string?)header.Attribute("Grid.Row"));
-        Assert.Equal("1", (string?)toolbar.Attribute("Grid.Row"));
+        Assert.Equal("2", (string?)toolbar.Attribute("Grid.Row"));
+        Assert.Equal("{StaticResource HeaderHeight}", (string?)header.Attribute("Height"));
+        Assert.Equal("{StaticResource ShellToolbarMargin}", (string?)toolbar.Attribute("Margin"));
+        var content = rootGrid.Elements(Wpf + "Grid").Single(element => (string?)element.Attribute("Grid.Row") == "4");
+        Assert.Equal("{StaticResource ShellContentMargin}", (string?)content.Attribute("Margin"));
+        // Nothing but the header (and its scrim) and the toolbar sits above the content row.
+        Assert.All(rootGrid.Elements().Where(element => element.Attribute("Grid.Row") is { } row && row.Value is "1" or "2" or "3"),
+            element => Assert.Equal("Toolbar", (string?)element.Attribute(Xaml + "Name")));
         // The module navigation and search live in the header row, not in a separate row.
         Assert.Contains(header.Descendants(), element => (string?)element.Attribute("ItemsSource") == "{Binding Workspaces}");
         Assert.Contains(header.Descendants(), element => (string?)element.Attribute(Xaml + "Name") == "SearchBox");
@@ -52,6 +60,127 @@ public class UiDesignTests
         Assert.Equal("12", tokens["RadiusLg"]);
         Assert.Equal("16", tokens["RadiusXl"]);
         Assert.Equal("14", tokens["RadiusSearch"]);
+    }
+
+    // ---------- Spacing and alignment contract ----------
+
+    [Fact]
+    public void Spacing_tokens_match_the_contract()
+    {
+        var tokens = Tokens();
+        Assert.Equal("10", tokens["ShellOuterInset"]);
+        Assert.Equal("8", tokens["ShellSurfaceGap"]);
+        Assert.Equal("8", tokens["ShellSurfaceGapRow"]);
+        Assert.Equal("10,0,10,0", tokens["ShellToolbarMargin"]);
+        Assert.Equal("10,0,10,10", tokens["ShellContentMargin"]);
+        Assert.Equal("16", tokens["PaneContentPadding"]);
+        Assert.Equal("12", tokens["PaneSectionGap"]);
+        Assert.Equal("0,12,0,0", tokens["PaneSectionGapTop"]);
+        Assert.Equal("8", tokens["PaneControlGap"]);
+        Assert.Equal("16", tokens["ToolbarGroupGap"]);
+        Assert.Equal("16,0,0,0", tokens["ToolbarGroupGapLeft"]);
+        Assert.Equal("0,0,8,0", tokens["ToolbarItemGapRight"]);
+        Assert.Equal("48", tokens["PaneHeaderMinHeight"]);
+        Assert.Equal("32", tokens["MailTableHeaderHeight"]);
+        Assert.Equal(LayoutArranger.Gutter.ToString(CultureInfo.InvariantCulture), tokens["ShellSurfaceGap"]);
+    }
+
+    [Fact]
+    public void Workspace_tab_tokens_match_the_contract()
+    {
+        var tokens = Tokens();
+        Assert.Equal("36", tokens["WorkspaceTabHeight"]);
+        Assert.Equal("72", tokens["WorkspaceTabMinWidth"]);
+        Assert.Equal("14,0", tokens["WorkspaceTabPadding"]);
+        Assert.Equal("0,0,6,0", tokens["WorkspaceTabGapRight"]);
+        Assert.Equal("16", tokens["WorkspaceTabRadius"]);
+        Assert.Equal("8,0,0,0", tokens["WorkspaceTabIconGap"]);
+        // 12 px on both sides of the strip: the right side adds 6 to the last tab's own 6 px gap.
+        Assert.Equal("12,0,6,0", tokens["WorkspaceTabStripMargin"]);
+    }
+
+    [Fact]
+    public void Workspace_navigation_uses_one_tab_style_and_selection_never_changes_geometry()
+    {
+        var window = File.ReadAllText(Path.Combine(App, "MainWindow.xaml"));
+        Assert.Contains("Style=\"{StaticResource WorkspaceTab}\"", window);
+        Assert.DoesNotContain("Style=\"{StaticResource NavButton}\"", window);
+        var controls = XDocument.Load(Path.Combine(App, "Themes", "Controls.xaml"));
+        foreach (var key in new[] { "WorkspaceTab", "NavButton", "TabItem" })
+        {
+            var style = controls.Root!.Elements(Wpf + "Style").Single(element => (string?)element.Attribute(Xaml + "Key") == key);
+            // Bold selected text is wider than regular text; selection must change colors only.
+            Assert.DoesNotContain(style.Descendants(Wpf + "Setter"), setter => (string?)setter.Attribute("Property") is "FontWeight" or "BorderThickness" or "Margin" or "Padding"
+                && setter.Parent?.Name.LocalName is "Trigger" or "DataTrigger" && !IsLayoutModeTrigger(setter.Parent));
+        }
+
+        static bool IsLayoutModeTrigger(XElement trigger) => ((string?)trigger.Attribute("Binding"))?.Contains("ShowNavLabels") == true;
+    }
+
+    [Fact]
+    public void Mail_header_and_rows_share_one_column_definition()
+    {
+        var window = File.ReadAllText(Path.Combine(App, "MainWindow.xaml"));
+        Assert.Equal(2, Regex.Matches(window, Regex.Escape("ui:MailColumns.Apply=\"True\"")).Count);
+        Assert.DoesNotContain("2.55*", window);
+        var document = XDocument.Load(Path.Combine(App, "MainWindow.xaml"));
+        var header = document.Descendants(Wpf + "Border").Single(element => (string?)element.Attribute(Xaml + "Name") == "ListColumnHeader");
+        Assert.Equal("{StaticResource MailTableHeaderHeight}", (string?)header.Attribute("Height"));
+        Assert.Equal("{StaticResource PaneSectionGapTop}", (string?)header.Attribute("Margin"));
+        foreach (var name in new[] { "ListHeader", "ReaderHeader" })
+        {
+            var row = document.Descendants(Wpf + "Grid").Single(element => (string?)element.Attribute(Xaml + "Name") == name);
+            Assert.Equal("{StaticResource PaneHeaderRow}", (string?)row.Attribute("Style"));
+            Assert.Null(row.Attribute("Margin"));
+        }
+
+        // Both content panes use the same surface style with the 16 px padding.
+        Assert.Equal(2, Regex.Matches(window, Regex.Escape("Style=\"{StaticResource ContentPane}\"")).Count);
+    }
+
+    [Fact]
+    public void Panes_are_separated_by_exactly_one_gutter_in_every_dock_combination()
+    {
+        const double width = 1200, height = 800;
+        foreach (var folders in Enum.GetValues<DockEdge>())
+        {
+            foreach (var reading in Enum.GetValues<DockEdge>())
+            {
+                foreach (var (folderBreadth, readingBreadth) in new[] { (52d, 330d), (152d, 500d), (300d, 120d) })
+                {
+                    var frames = LayoutArranger.Arrange(folders, reading, width, height, folderBreadth, readingBreadth);
+                    var panes = new[] { frames.Folders, frames.Inbox, frames.Reader }.Where(box => box.HasArea).ToList();
+                    // The outer panes touch the content bounds: the 10 px window inset is the content margin, not extra padding.
+                    Assert.Equal(0, panes.Min(box => box.X), 3);
+                    Assert.Equal(0, panes.Min(box => box.Y), 3);
+                    Assert.Equal(width, panes.Max(box => box.X + box.Width), 3);
+                    Assert.Equal(height, panes.Max(box => box.Y + box.Height), 3);
+                    var gaps = new List<double>();
+                    for (var i = 0; i < panes.Count; i++)
+                    {
+                        for (var j = 0; j < panes.Count; j++)
+                        {
+                            if (i == j)
+                                continue;
+                            var a = panes[i];
+                            var b = panes[j];
+                            var sharesRows = a.Y < b.Y + b.Height - 0.5 && b.Y < a.Y + a.Height - 0.5;
+                            var sharesColumns = a.X < b.X + b.Width - 0.5 && b.X < a.X + a.Width - 0.5;
+                            if (sharesRows && b.X >= a.X + a.Width - 0.5)
+                                gaps.Add(b.X - (a.X + a.Width));
+                            if (sharesColumns && b.Y >= a.Y + a.Height - 0.5)
+                                gaps.Add(b.Y - (a.Y + a.Height));
+                        }
+                    }
+
+                    // Adjacent panes: exactly one 8 px gutter; never 0 and never doubled.
+                    Assert.All(gaps.Where(gap => gap < LayoutArranger.Gutter * 2 + 1), gap => Assert.Equal(LayoutArranger.Gutter, gap, 3));
+                    Assert.All(frames.Splitters, splitter =>
+                        Assert.Equal(LayoutArranger.Gutter, splitter.Edge is DockEdge.Left or DockEdge.Right ? splitter.Bounds.Width : splitter.Bounds.Height, 3));
+                    Assert.All(frames.Splitters, splitter => Assert.DoesNotContain(panes, pane => pane.Overlaps(splitter.Bounds)));
+                }
+            }
+        }
     }
 
     // ---------- Themes ----------
@@ -291,7 +420,7 @@ public class UiDesignTests
     {
         var document = XDocument.Load(Path.Combine(App, "Themes", "Controls.xaml"));
         return document.Root!.Elements()
-            .Where(element => element.Attribute(Xaml + "Key") is not null && element.Name.LocalName is "CornerRadius" or "Double")
+            .Where(element => element.Attribute(Xaml + "Key") is not null && element.Name.LocalName is "CornerRadius" or "Double" or "Thickness" or "GridLength")
             .ToDictionary(element => (string)element.Attribute(Xaml + "Key")!, element => element.Value.Trim());
     }
 

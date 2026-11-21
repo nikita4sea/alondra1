@@ -18,7 +18,7 @@ Screenshots are produced by the app itself: `Alondra1.exe --demo --snapshot=<fil
 
 | Row | Height | Contents |
 | --- | --- | --- |
-| Application header | 56 px | Logo and “Alondra1” wordmark · Mail, Calendar, To-do, Notes, Contacts, Chat (Soon) · contextual search · Settings · window buttons |
+| Application header | 56 px | Logo and “Alondra1” wordmark · workspace tabs: Mail, Calendar, To-do, Notes, Contacts, Chat (Soon) · contextual search · Settings · window buttons |
 | Module toolbar | 48 px | Mail: account selector with connection status, folder tabs, New / Reply / Reply all / Forward / Archive / Delete / Mark read or unread, Layout, More. Calendar: month navigation. To-do: sort, filter, important, undo, More. Notes: note selector, New note. Contacts: count. Chat: “Coming later”. |
 
 The old module-navigation row, the “Mail” title, and the account/status text row are gone. Connection status (Up to date, Syncing…, Offline, Sync failed, Sample data, No accounts) is a colored dot with a label beside the account selector; the full text (account · mode · detail) is its tooltip and accessible name. Due task reminders float over the content as cards instead of occupying a row.
@@ -27,6 +27,35 @@ The old module-navigation row, the “Mail” title, and the account/status text
 
 **Folders:** with the Layout setting “Folders: Top” (the default) they are tabs in the toolbar. Left, Right, and Bottom still show the dockable folder pane, and Hidden shows a selector in the list header, so all 25 layout combinations keep working and folders are never shown twice.
 
+### Spacing contract
+
+One set of tokens in `Themes/Controls.xaml` governs the shell, the toolbar, and the Mail panes; views reference the tokens instead of literal margins. All values are WPF DIPs.
+
+| Token | Value | Where |
+| --- | ---: | --- |
+| `ShellOuterInset` (`ShellToolbarMargin`, `ShellContentMargin`) | 10 | window edge → toolbar and content, left, right, and bottom |
+| `ShellSurfaceGap` (`ShellSurfaceGapRow`) | 8 | header → toolbar, toolbar → content, and between adjacent panes |
+| `PaneContentPadding` (style `ContentPane`) | 16 | inside the message list and reading pane, headers included |
+| `PaneHeaderMinHeight` (style `PaneHeaderRow`) | 48 | the “Inbox · view · count” row and the reader's status row |
+| `PaneSectionGap` | 12 | pane header row → next region (column row, subject or “No message selected”) |
+| `MailTableHeaderHeight` | 32 | From / Subject / Received row |
+| `PaneControlGap` | 8 | between controls in one row |
+| `ToolbarGroupGap` | 16 | account selector → status chip; status → folders is 8 + divider + 8 |
+| `ToolbarItemGapRight` | 8 | between folder tabs and other controls inside a toolbar group |
+| `ControlMd` | 36 | account selector, status chip, and folder tabs: one height, one center line |
+
+The shell grid is header 56 · 8 · toolbar 48 · 8 · content. In Mail, `LayoutArranger.Gutter` (8) reserves exactly one gutter between each adjacent pair of panes in all 25 dock combinations; the splitter's hit target is that gutter, so resizing never adds or removes spacing.
+
+Alignment in the Mail panes:
+
+- **List pane:** the folder title starts at the 16 px inset; the view selector and the count form a right-anchored group ending at the 16 px inset. From / Subject / Received and every message row use one column definition (`Controls/MailColumns.cs`), so the labels stay over their columns at any width. Each row reserves a 16 px unread-dot gutter, so “From” lines up with the sender names, not with the title. When the list shows its scroll bar, the column header takes the same right inset.
+- **Reading pane:** the status icon, label, and **Plain text** sit in the same 48 px header row as the list's title row; the subject (or “No message selected”) starts 12 px below it. The header row keeps its size with or without a message.
+- **Selection** changes only colors (fill and foreground), never font weight, padding, or borders, so tabs and workspace tabs keep their bounds.
+
+### Workspace tabs
+
+The modules in the header are one strip of rounded, browser-style tabs (style `WorkspaceTab`): 36 px high, at least 72 px wide (40 px icon-only), 14 px horizontal padding, 16 px corner radius, 8 px between icon and label, 6 px between tabs, and a 12 px inset around the strip. Inactive tabs are soft blocks (`WorkspaceTabBrush`, a translucent lift over the chrome), hover uses `HoverBrush`, and the active tab is filled with `SelectedBrush` and `BlueBrush` text. No shadow. The “Soon” chip on Chat sits inside the tab without changing its height. The pattern applies only to the header modules, not to folder tabs, To-do views, or selectors.
+
 ### Narrow windows
 
 The header and toolbar never wrap into another row. As the window narrows, in this order:
@@ -34,15 +63,16 @@ The header and toolbar never wrap into another row. As the window narrows, in th
 | Window width | Change |
 | --- | --- |
 | < 1240 | Status label hidden (dot remains, with tooltip) |
-| < 1120 | Module labels hidden (icon buttons with tooltips and accessible names) |
+| < 1200 | Workspace tab labels hidden (icon-only tabs with tooltips and accessible names) |
 | < 1040 | Reply all, Forward, Archive, Mark read move into the toolbar's More menu |
 | < 960 | Folder tab labels hidden |
+| < 860 | Search collapses to a search button that opens a search box |
 | < 760 | Folder tabs become a folder selector |
-| < 720 | Search collapses to a search button that opens a search box |
-| < 640 | Wordmark hidden (logo stays) |
-| < 600 | Notes, Contacts, Chat move into a More menu in the header |
-| < 560 | “New” label hidden (icon stays) |
-| < 470 | Calendar and To-do also move into More |
+| < 720 | Notes, Contacts, Chat move into a More menu in the header |
+| < 640 | Wordmark hidden (logo stays); account and folder selectors narrow to 100–120 px |
+| < 560 | “New” label hidden (icon stays); Calendar and To-do also move into More |
+
+These breakpoints are wider than before the tab strip (labels used to hide at 1120 px, search at 720, overflow at 600 and 470) because the rounded tabs need more room than flat buttons.
 
 The module that is open always stays visible in the header. In To-do, the list sidebar becomes a menu button under 720 px and the details pane floats over the list under 1000 px.
 
@@ -132,7 +162,11 @@ The built-in pictures are original artwork drawn for Alondra1 by `design/backgro
 | Mail actions enabled by selection; behavior preserved | Done; same commands and shortcuts |
 | Calendar, To-do, Notes, Contacts, Settings audited | Done for the main window and To-do; Settings keeps its form layout with the new controls |
 | Keyboard, screen-reader names, focus states | Kept; icon-only buttons have names and tooltips; not tested with a screen reader |
-| Automated tests pass | 97 passed, 1 skipped (the existing 10 GB mailbox test) |
+| Spacing contract: 10 px outer inset, 8 px surface gaps, one 8 px pane gutter, 16 px pane padding | Done (tokens, `LayoutArranger.Gutter`; checked by `UiDesignTests` for all 25 dock combinations) |
+| Toolbar on one center line, 8 px inside groups, 16 px between groups | Done; checked in snapshots |
+| List and reader header rows 48 px; shared mail columns | Done (checked by `UiDesignTests` and snapshots) |
+| Rounded browser-style workspace tabs | Done; light, dark, and picture backgrounds inspected at 1400 px; narrow widths 470–1200 px inspected in dark |
+| Automated tests pass | 103 passed, 1 skipped (the existing 10 GB mailbox test) |
 | No new cloud service, telemetry, or server | None added |
 
 ## Limitations
@@ -143,3 +177,5 @@ The built-in pictures are original artwork drawn for Alondra1 by `design/backgro
 - **Sliders** in Settings use the standard Windows look.
 - **WebP** pictures need the Windows WebP codec (included in Windows 11; on Windows 10 it is the “WebP Image Extensions” Store package). Without it the picker explains this and nothing changes.
 - Screen readers were not used for testing; the accessibility tree was read through UI Automation.
+- **Spacing at display scaling** other than 100% (125%, 150%, 200%) and after maximize/restore was not measured; geometry is in DIPs with layout rounding on.
+- **Very narrow Mail toolbar:** at about 470 px the folder selector is partly covered by the New button (as it was before the spacing change); the header itself fits.

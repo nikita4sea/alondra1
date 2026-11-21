@@ -478,6 +478,40 @@ public partial class MainWindow : Window
         var viewer = FindScrollViewer(MessageList);
         var height = viewer?.ViewportHeight ?? MessageList.ActualHeight;
         _model.UpdateViewport(MessageList.ActualWidth, height > 1 ? height : MessageList.ActualHeight);
+        AlignColumnHeader();
+    }
+
+    private void MessageList_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (e.ViewportWidthChange != 0 || e.ExtentHeightChange != 0 || e.ViewportHeightChange != 0)
+            AlignColumnHeader();
+    }
+
+    /// <summary>
+    /// Rows lose the width of the vertical scroll bar when it shows; give the column header the same right inset so
+    /// From / Subject / Received stay over their columns.
+    /// </summary>
+    private void AlignColumnHeader()
+    {
+        var bar = FindScrollViewer(MessageList)?.ComputedVerticalScrollBarVisibility == Visibility.Visible
+            ? FindVerticalScrollBar(MessageList)?.ActualWidth ?? 0
+            : 0;
+        if (ListColumnHeader.Child is FrameworkElement columns && Math.Abs(columns.Margin.Right - bar) > 0.1)
+            columns.Margin = new Thickness(0, 0, bar, 0);
+    }
+
+    private static System.Windows.Controls.Primitives.ScrollBar? FindVerticalScrollBar(DependencyObject root)
+    {
+        for (var i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is System.Windows.Controls.Primitives.ScrollBar { Orientation: Orientation.Vertical } bar)
+                return bar;
+            if (FindVerticalScrollBar(child) is { } found)
+                return found;
+        }
+
+        return null;
     }
 
     /// <summary>Less common mail actions, plus the actions hidden from the toolbar when the window is narrow.</summary>

@@ -47,6 +47,12 @@ public static class LayoutArranger
     public const double MinReaderSide = 108;
     public const double MinReaderBand = 96;
 
+    /// <summary>
+    /// The one clear gap between adjacent panes (ShellSurfaceGap in Controls.xaml). Exactly one gutter is reserved per
+    /// adjacent pair, and the splitter hit target fills it, so resizing never adds or removes spacing.
+    /// </summary>
+    public const double Gutter = 8;
+
     public static LayoutNode Compose(DockEdge folders, DockEdge reading)
     {
         LayoutNode node = new LayoutLeaf("inbox");
@@ -69,8 +75,8 @@ public static class LayoutArranger
         double height,
         double folderBreadth,
         double readingBreadth,
-        double gap = 6,
-        double pad = 6)
+        double gap = Gutter,
+        double pad = 0)
     {
         var map = new Dictionary<string, Box>(StringComparer.Ordinal);
         var splitters = new List<SplitterHit>();

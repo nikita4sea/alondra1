@@ -33,6 +33,34 @@
   <Thickness x:Key="PanelPadding">16</Thickness>
   <Thickness x:Key="DialogPadding">20,16,20,20</Thickness>
 
+  <!-- ===== Shell spacing contract (docs/UI-DESIGN.md → Spacing contract). One source of truth; views reference these. ===== -->
+  <sys:Double x:Key="ShellOuterInset">10</sys:Double>          <!-- window edge → toolbar and content (left, right, bottom) -->
+  <sys:Double x:Key="ShellSurfaceGap">8</sys:Double>           <!-- header → toolbar, toolbar → content, pane → pane -->
+  <GridLength x:Key="ShellSurfaceGapRow">8</GridLength>
+  <Thickness x:Key="ShellToolbarMargin">10,0,10,0</Thickness>
+  <Thickness x:Key="ShellContentMargin">10,0,10,10</Thickness>
+  <Thickness x:Key="PaneContentPadding">16</Thickness>         <!-- inside the message list and reading pane, headers included -->
+  <sys:Double x:Key="PaneSectionGap">12</sys:Double>           <!-- pane header row → next region -->
+  <Thickness x:Key="PaneSectionGapTop">0,12,0,0</Thickness>
+  <sys:Double x:Key="PaneControlGap">8</sys:Double>            <!-- controls in one row -->
+  <Thickness x:Key="PaneControlGapLeft">8,0,0,0</Thickness>
+  <sys:Double x:Key="ToolbarGroupGap">16</sys:Double>          <!-- between toolbar groups without a divider -->
+  <Thickness x:Key="ToolbarGroupGapLeft">16,0,0,0</Thickness>
+  <Thickness x:Key="ToolbarItemGapRight">0,0,8,0</Thickness>   <!-- between controls inside a toolbar group -->
+  <sys:Double x:Key="PaneHeaderMinHeight">48</sys:Double>      <!-- message-list and reader header rows -->
+  <sys:Double x:Key="MailTableHeaderHeight">32</sys:Double>    <!-- From / Subject / Received row -->
+
+  <!-- Workspace tabs in the header (Mail, Calendar, To-do, Notes, Contacts, Chat). -->
+  <sys:Double x:Key="WorkspaceTabHeight">36</sys:Double>
+  <sys:Double x:Key="WorkspaceTabMinWidth">72</sys:Double>
+  <sys:Double x:Key="WorkspaceTabIconOnlyWidth">40</sys:Double>
+  <Thickness x:Key="WorkspaceTabPadding">14,0</Thickness>
+  <Thickness x:Key="WorkspaceTabGapRight">0,0,6,0</Thickness>  <!-- 6 px between tabs, applied on one side only -->
+  <CornerRadius x:Key="WorkspaceTabRadius">16</CornerRadius>
+  <Thickness x:Key="WorkspaceTabIconGap">8,0,0,0</Thickness>
+  <!-- 12 px around the strip; the right side is 6 because the last tab already carries its 6 px gap. -->
+  <Thickness x:Key="WorkspaceTabStripMargin">12,0,6,0</Thickness>
+
   <!-- Type scale -->
   <sys:Double x:Key="FontTitle">16</sys:Double>          <!-- app name, dialog and section titles -->
   <sys:Double x:Key="FontHeading">18</sys:Double>        <!-- view headings -->
@@ -165,7 +193,8 @@
     <Setter Property="HorizontalContentAlignment" Value="Left"/>
   </Style>
 
-  <!-- A Button whose "selected" look comes from Tag=True. Assistive tools invoke it like any button. -->
+  <!-- A Button whose "selected" look comes from Tag=True. Assistive tools invoke it like any button.
+       Selection changes only colors, never the font weight, so the button keeps its size. -->
   <Style x:Key="NavButton" TargetType="Button" BasedOn="{StaticResource QuietButton}">
     <Setter Property="Padding" Value="10,0"/>
     <Setter Property="MinHeight" Value="{StaticResource ControlMd}"/>
@@ -174,7 +203,48 @@
       <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
         <Setter Property="Background" Value="{DynamicResource SelectedBrush}"/>
         <Setter Property="Foreground" Value="{DynamicResource BlueBrush}"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
+      </DataTrigger>
+    </Style.Triggers>
+  </Style>
+
+  <!-- Rounded, browser-style workspace tab in the header. Tag=True marks the active workspace.
+       Every state has the same size: 36 px high, same padding, same (zero) border; only fill and foreground change. -->
+  <Style x:Key="WorkspaceTab" TargetType="Button" BasedOn="{StaticResource QuietButton}">
+    <Setter Property="Height" Value="{StaticResource WorkspaceTabHeight}"/>
+    <Setter Property="MinHeight" Value="{StaticResource WorkspaceTabHeight}"/>
+    <Setter Property="MinWidth" Value="{StaticResource WorkspaceTabMinWidth}"/>
+    <Setter Property="Padding" Value="{StaticResource WorkspaceTabPadding}"/>
+    <Setter Property="Margin" Value="{StaticResource WorkspaceTabGapRight}"/>
+    <Setter Property="Background" Value="{DynamicResource WorkspaceTabBrush}"/>
+    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource WorkspaceTabRadius}"
+                  Padding="{TemplateBinding Padding}" SnapsToDevicePixels="True">
+            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}"/>
+              <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+            </Trigger>
+            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SelectedBrush}"/>
+              <Setter Property="Foreground" Value="{DynamicResource BlueBrush}"/>
+            </DataTrigger>
+            <Trigger Property="IsPressed" Value="True">
+              <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SelectedBrush}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+    <Style.Triggers>
+      <!-- Icon-only tabs (narrow window): same 36 px block, narrower. -->
+      <DataTrigger Binding="{Binding DataContext.ShowNavLabels, RelativeSource={RelativeSource AncestorType=Window}}" Value="False">
+        <Setter Property="MinWidth" Value="{StaticResource WorkspaceTabIconOnlyWidth}"/>
+        <Setter Property="Padding" Value="11,0"/>
       </DataTrigger>
     </Style.Triggers>
   </Style>
@@ -648,6 +718,38 @@
     <Setter Property="CornerRadius" Value="{StaticResource RadiusLg}"/>
   </Style>
 
+  <!-- Message-list and reading panes: same surface, radius, border, and 16 px content padding. -->
+  <Style x:Key="ContentPane" TargetType="Border" BasedOn="{StaticResource Pane}">
+    <Setter Property="Padding" Value="{StaticResource PaneContentPadding}"/>
+  </Style>
+
+  <!-- The top row of a content pane (Inbox + view + count; reader status + Plain text): 48 px, centered. -->
+  <Style x:Key="PaneHeaderRow" TargetType="Grid">
+    <Setter Property="MinHeight" Value="{StaticResource PaneHeaderMinHeight}"/>
+    <Setter Property="VerticalAlignment" Value="Top"/>
+  </Style>
+
+  <!-- Account and folder selectors in the toolbar: narrower when the window is narrow (no wordmark, below 640 px),
+       so the toolbar keeps its group spacing instead of covering a control. -->
+  <Style x:Key="ToolbarSelector" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+    <Setter Property="MinWidth" Value="150"/>
+    <Style.Triggers>
+      <DataTrigger Binding="{Binding DataContext.ShowWordmark, RelativeSource={RelativeSource AncestorType=Window}}" Value="False">
+        <Setter Property="MinWidth" Value="100"/>
+        <Setter Property="MaxWidth" Value="120"/>
+      </DataTrigger>
+    </Style.Triggers>
+  </Style>
+
+  <!-- Status chip in the toolbar: same 36 px surface as the account selector and folder tabs. -->
+  <Style x:Key="StatusChip" TargetType="Border">
+    <Setter Property="Height" Value="{StaticResource ControlMd}"/>
+    <Setter Property="Padding" Value="12,0"/>
+    <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
+    <Setter Property="Background" Value="{DynamicResource SubtleBrush}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+
   <!-- The single module toolbar row under the header. -->
   <Style x:Key="Toolbar" TargetType="Border">
     <Setter Property="Background" Value="{DynamicResource PanelBrush}"/>
@@ -673,13 +775,16 @@
     <Setter Property="VerticalAlignment" Value="Center"/>
   </Style>
 
-  <!-- Folder tabs and similar single-choice strips in the toolbar. -->
+  <!-- Folder tabs and similar single-choice strips in the toolbar. Every tab is 36 px high with 8 px between tabs;
+       selection changes only colors, never the font weight, so tabs keep their bounds. -->
   <Style x:Key="TabItem" TargetType="ListBoxItem">
     <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
     <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
     <Setter Property="Padding" Value="10,0"/>
+    <Setter Property="Height" Value="{StaticResource ControlMd}"/>
     <Setter Property="MinHeight" Value="{StaticResource ControlMd}"/>
-    <Setter Property="Margin" Value="0,0,2,0"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="Margin" Value="{StaticResource ToolbarItemGapRight}"/>
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="Template">
       <Setter.Value>
@@ -694,7 +799,6 @@
             <Trigger Property="IsSelected" Value="True">
               <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SelectedBrush}"/>
               <Setter Property="Foreground" Value="{DynamicResource BlueBrush}"/>
-              <Setter Property="FontWeight" Value="SemiBold"/>
             </Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>

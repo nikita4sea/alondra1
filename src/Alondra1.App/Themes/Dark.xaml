@@ -7,6 +7,7 @@
   <SolidColorBrush x:Key="PanelBrush" Color="#1E1D2A"/>
   <SolidColorBrush x:Key="HeaderScrimBrush" Color="#0016151F"/>
   <SolidColorBrush x:Key="SubtleBrush" Color="#252434"/>
+  <SolidColorBrush x:Key="WorkspaceTabBrush" Color="#B3252434"/> <!-- inactive header tabs: a soft block lighter than the chrome -->
   <SolidColorBrush x:Key="TextBrush" Color="#ECEBF5"/>
   <SolidColorBrush x:Key="MutedBrush" Color="#A4A3BE"/>         <!-- 6.9:1 on Surface -->
   <SolidColorBrush x:Key="LineBrush" Color="#33324A"/>

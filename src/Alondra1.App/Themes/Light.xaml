@@ -7,6 +7,7 @@
   <SolidColorBrush x:Key="PanelBrush" Color="#FFFFFF"/>         <!-- main panels; translucent over a background picture -->
   <SolidColorBrush x:Key="HeaderScrimBrush" Color="#00F6F4FA"/>  <!-- behind the header; set by ThemeService when a picture shows -->
   <SolidColorBrush x:Key="SubtleBrush" Color="#FAF9FD"/>        <!-- toolbar fields, cards -->
+  <SolidColorBrush x:Key="WorkspaceTabBrush" Color="#B3FFFFFF"/> <!-- inactive header tabs: a soft block lighter than the chrome -->
   <SolidColorBrush x:Key="TextBrush" Color="#2A2940"/>          <!-- deep indigo slate -->
   <SolidColorBrush x:Key="MutedBrush" Color="#5F5E7A"/>         <!-- 5.6:1 on the base -->
   <SolidColorBrush x:Key="LineBrush" Color="#E2DFEE"/>
