@@ -102,6 +102,8 @@ public sealed class TodoTask
 
     public bool IsOverdue(DateOnly today) => !Completed && DueDate is { } due && due < today;
 
+    /// <summary>Derived from <see cref="Subtasks"/>; not serialized (it used to be written as an empty object and was ignored on import).</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public (int Done, int Total) SubtaskProgress => (Subtasks.Count(item => item.Completed), Subtasks.Count);
 
     public TodoTask Clone()

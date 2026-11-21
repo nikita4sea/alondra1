@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://alondra1.local/schemas/todo-v1.schema.json",
+  "title": "Alondra1 to-do document, version 1",
+  "description": "The task model of Alondra1 1.3.0 exactly as Alondra1.Core.Tasks.TodoTransfer serializes it: camelCase names, enums as strings, null values omitted. Source of truth: apps/windows/src/Alondra1.Core/Tasks/TodoModels.cs. Alondra1.Tests.ContractSchemaTests fails when the C# model and this schema disagree. Date-only, local wall-clock, and UTC values are distinct formats and must not be converted into each other.",
+  "type": "object",
+  "required": ["format", "version"],
+  "additionalProperties": false,
+  "properties": {
+    "format": { "const": "alondra1-todo" },
+    "version": { "type": "integer", "minimum": 1, "maximum": 1 },
+    "exportedUtc": { "$ref": "#/$defs/utcInstant" },
+    "groups": { "type": "array", "items": { "$ref": "#/$defs/ListGroup" } },
+    "lists": { "type": "array", "items": { "$ref": "#/$defs/TaskList" } },
+    "tasks": { "type": "array", "maxItems": 200000, "items": { "$ref": "#/$defs/TodoTask" } },
+    "history": { "type": "array", "items": { "$ref": "#/$defs/CompletionRecord" } }
+  },
+  "$defs": {
+    "id": {
+      "description": "Stable identifier. New Windows ids are 32 lowercase hex characters (Guid \"n\"); other clients may send UUID strings. Cloud enrollment keeps ids; JSON import remaps them.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "utcInstant": {
+      "description": "An instant with an explicit offset (System.DateTimeOffset), e.g. 2026-11-21T09:54:00+00:00.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "calendarDate": {
+      "description": "A calendar date without time or zone (System.DateOnly), e.g. 2026-11-21. Never derived from a UTC instant.",
+      "type": "string",
+      "format": "date"
+    },
+    "localTime": {
+      "description": "A local wall-clock time of day (System.TimeOnly), e.g. 16:00:00.",
+      "type": "string",
+      "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9](\\.[0-9]{1,7})?)?$"
+    },
+    "localDateTime": {
+      "description": "A local wall-clock date and time WITHOUT offset (System.DateTime, Kind Unspecified), e.g. 2026-03-29T02:30:00. It follows the device time zone and DST and must not be converted to UTC.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,7})?$"
+    },
+    "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+    "dayOfWeek": { "enum": ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] },
+    "RecurrenceRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "frequency": { "enum": ["Daily", "Weekly", "Monthly", "Yearly"] },
+        "interval": { "type": "integer", "minimum": 1 },
+        "daysOfWeek": { "type": "array", "items": { "$ref": "#/$defs/dayOfWeek" }, "uniqueItems": true },
+        "until": { "$ref": "#/$defs/calendarDate" },
+        "anchor": {
+          "$ref": "#/$defs/calendarDate",
+          "description": "First date of the series. Monthly and yearly repeats count from it, so Jan 31 -> Feb 28 -> Mar 31 does not drift."
+        }
+      }
+    },
+    "TaskReminder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "at"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "at": { "$ref": "#/$defs/localDateTime" },
+        "deliveredFor": {
+          "$ref": "#/$defs/localDateTime",
+          "description": "Device-local delivery state: the `at` value a notification was already shown for. Not part of the shared reminder definition in cloud sync."
+        },
+        "dismissed": { "type": "boolean", "description": "Device-local delivery state in cloud sync." },
+        "snoozedUntilUtc": { "$ref": "#/$defs/utcInstant", "description": "Device-local delivery state in cloud sync." }
+      }
+    },
+    "Subtask": {
+      "description": "A step. Order is the array order; steps are not nested tasks.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "type": "string", "maxLength": 2000 },
+        "completed": { "type": "boolean" },
+        "completedUtc": { "$ref": "#/$defs/utcInstant" }
+      }
+    },
+    "TaskAttachment": {
+      "description": "Metadata only. The file bytes stay in the device's task-file folder; cloud sync does not back them up yet.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "fileName", "relativePath"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "fileName": { "type": "string", "maxLength": 260 },
+        "relativePath": {
+          "type": "string",
+          "maxLength": 520,
+          "pattern": "^(?![\\\\/])(?!.*(^|[\\\\/])\\.\\.([\\\\/]|$))(?![A-Za-z]:).+$",
+          "description": "Relative to the task-file folder; never absolute, never containing '..'."
+        },
+        "size": { "type": "integer", "minimum": 0 },
+        "addedUtc": { "$ref": "#/$defs/utcInstant" }
+      }
+    },
+    "TodoTask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "listId", "title"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "listId": { "$ref": "#/$defs/id" },
+        "title": { "type": "string", "maxLength": 2000 },
+        "notes": { "type": "string", "maxLength": 100000 },
+        "completed": { "type": "boolean" },
+        "important": { "type": "boolean" },
+        "position": { "type": "number" },
+        "createdUtc": { "$ref": "#/$defs/utcInstant" },
+        "modifiedUtc": { "$ref": "#/$defs/utcInstant" },
+        "completedUtc": { "$ref": "#/$defs/utcInstant" },
+        "startDate": { "$ref": "#/$defs/calendarDate" },
+        "dueDate": { "$ref": "#/$defs/calendarDate" },
+        "dueTime": { "$ref": "#/$defs/localTime" },
+        "myDayDate": { "$ref": "#/$defs/calendarDate" },
+        "recurrence": { "$ref": "#/$defs/RecurrenceRule" },
+        "reminders": { "type": "array", "items": { "$ref": "#/$defs/TaskReminder" } },
+        "subtasks": { "type": "array", "items": { "$ref": "#/$defs/Subtask" } },
+        "attachments": { "type": "array", "items": { "$ref": "#/$defs/TaskAttachment" } }
+      }
+    },
+    "TaskList": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "maxLength": 200, "description": "May contain emoji." },
+        "groupId": { "$ref": "#/$defs/id" },
+        "color": { "$ref": "#/$defs/color" },
+        "tintBackground": { "type": "boolean" },
+        "position": { "type": "number" },
+        "isDefault": { "type": "boolean", "description": "The default Tasks list; it cannot be deleted." },
+        "createdUtc": { "$ref": "#/$defs/utcInstant" }
+      }
+    },
+    "ListGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "maxLength": 200 },
+        "position": { "type": "number" },
+        "collapsed": { "type": "boolean", "description": "Presentation preference; device-local in cloud sync." }
+      }
+    },
+    "CompletionRecord": {
+      "description": "Append-only completion history, also for each occurrence of a recurring task. Never inferred from the current `completed` flag.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "taskId", "completedUtc"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "taskId": { "$ref": "#/$defs/id" },
+        "title": { "type": "string", "maxLength": 2000 },
+        "listId": { "$ref": "#/$defs/id" },
+        "completedUtc": { "$ref": "#/$defs/utcInstant" },
+        "occurrenceDate": { "$ref": "#/$defs/calendarDate" }
+      }
+    },
+    "TaskPreferences": {
+      "description": "To-do preferences (not part of the export document). In cloud sync only the cross-device choices travel; window geometry and notification delivery do not.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "selectedView": { "type": "string", "maxLength": 200 },
+        "sortByView": {
+          "type": "object",
+          "additionalProperties": { "enum": ["Manual", "DueDate", "Importance", "Created", "Alphabetical"] }
+        },
+        "sortDescendingByView": { "type": "object", "additionalProperties": { "type": "boolean" } },
+        "statusFilter": { "enum": ["Open", "All", "Completed"] },
+        "importantOnlyFilter": { "type": "boolean" },
+        "showCounts": { "type": "boolean" },
+        "detailsOpen": { "type": "boolean" },
+        "calendarMode": { "enum": ["Day", "Week", "Month"] },
+        "notificationsEnabled": { "type": "boolean" },
+        "snoozeMinutes": { "type": "integer", "minimum": 1, "maximum": 1440 }
+      }
+    }
+  }
+}

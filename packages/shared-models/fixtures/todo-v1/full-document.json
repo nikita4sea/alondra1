@@ -1,0 +1,162 @@
+{
+  "format": "alondra1-todo",
+  "version": 1,
+  "exportedUtc": "2026-11-21T12:00:00+00:00",
+  "groups": [
+    {
+      "id": "group-work",
+      "name": "Work",
+      "position": 1,
+      "collapsed": false
+    }
+  ],
+  "lists": [
+    {
+      "id": "list-tasks",
+      "name": "Tasks",
+      "tintBackground": false,
+      "position": 0,
+      "isDefault": true,
+      "createdUtc": "2026-01-05T08:30:00+00:00"
+    },
+    {
+      "id": "list-launch",
+      "name": "\uD83D\uDE80 Launch",
+      "groupId": "group-work",
+      "color": "#6C6DB0",
+      "tintBackground": true,
+      "position": 1,
+      "isDefault": false,
+      "createdUtc": "2026-01-05T08:30:00+00:00"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-month-end",
+      "listId": "list-launch",
+      "title": "Close the books",
+      "notes": "Runs on the last day of each month.",
+      "completed": false,
+      "important": true,
+      "position": 1,
+      "createdUtc": "2026-01-05T08:30:00+00:00",
+      "modifiedUtc": "2026-03-01T09:00:00+00:00",
+      "dueDate": "2026-03-31",
+      "dueTime": "16:00:00",
+      "recurrence": {
+        "frequency": "Monthly",
+        "interval": 1,
+        "daysOfWeek": [],
+        "until": "2026-12-31",
+        "anchor": "2026-01-31"
+      },
+      "reminders": [
+        {
+          "id": "reminder-dst",
+          "at": "2026-03-29T02:30:00",
+          "deliveredFor": "2026-03-29T02:30:00",
+          "dismissed": false
+        },
+        {
+          "id": "reminder-due",
+          "at": "2026-03-31T15:00:00",
+          "dismissed": false,
+          "snoozedUntilUtc": "2026-03-31T13:10:00+00:00"
+        }
+      ],
+      "subtasks": [
+        {
+          "id": "step-1",
+          "title": "Export statements",
+          "completed": true,
+          "completedUtc": "2026-03-30T10:00:00+00:00"
+        },
+        {
+          "id": "step-2",
+          "title": "Reconcile",
+          "completed": false
+        },
+        {
+          "id": "step-3",
+          "title": "Send summary",
+          "completed": false
+        }
+      ],
+      "attachments": [
+        {
+          "id": "file-1",
+          "fileName": "checklist.pdf",
+          "relativePath": "task-month-end/checklist.pdf",
+          "size": 48213,
+          "addedUtc": "2026-01-05T08:30:00+00:00"
+        }
+      ]
+    },
+    {
+      "id": "task-weekly",
+      "listId": "list-tasks",
+      "title": "Water the plants",
+      "notes": "",
+      "completed": false,
+      "important": false,
+      "position": 2,
+      "createdUtc": "2026-01-05T08:30:00+00:00",
+      "modifiedUtc": "2026-01-05T08:30:00+00:00",
+      "startDate": "2026-11-02",
+      "dueDate": "2026-11-23",
+      "myDayDate": "2026-11-21",
+      "recurrence": {
+        "frequency": "Weekly",
+        "interval": 2,
+        "daysOfWeek": [
+          "Monday",
+          "Thursday"
+        ],
+        "anchor": "2026-11-02"
+      },
+      "reminders": [],
+      "subtasks": [],
+      "attachments": []
+    },
+    {
+      "id": "task-done",
+      "listId": "list-tasks",
+      "title": "Renew passport",
+      "notes": "",
+      "completed": true,
+      "important": false,
+      "position": 3,
+      "createdUtc": "2026-01-05T08:30:00+00:00",
+      "modifiedUtc": "2026-02-10T17:45:00+01:00",
+      "completedUtc": "2026-02-10T17:45:00+01:00",
+      "reminders": [],
+      "subtasks": [],
+      "attachments": []
+    }
+  ],
+  "history": [
+    {
+      "id": "done-jan",
+      "taskId": "task-month-end",
+      "title": "Close the books",
+      "listId": "list-launch",
+      "completedUtc": "2026-01-31T16:05:00+00:00",
+      "occurrenceDate": "2026-01-31"
+    },
+    {
+      "id": "done-feb",
+      "taskId": "task-month-end",
+      "title": "Close the books",
+      "listId": "list-launch",
+      "completedUtc": "2026-02-28T15:00:00+00:00",
+      "occurrenceDate": "2026-02-28"
+    },
+    {
+      "id": "done-passport",
+      "taskId": "task-done",
+      "title": "Renew passport",
+      "listId": "list-tasks",
+      "completedUtc": "2026-02-10T17:45:00+01:00"
+    }
+  ]
+}
