@@ -1,8 +1,8 @@
 # Features
 
-<img src="images/alondra-logo-64.png" alt="" width="48" align="right">
+<img src="images/alondra1-logo-64.png" alt="" width="48" align="right">
 
-What Alondra 1.3.0 does today, by workspace. Each workspace has a keyboard shortcut (Ctrl+1 … Ctrl+6). Items marked *Not yet* are known gaps, not hidden features.
+What Alondra1 1.3.0 does today, by workspace. Each workspace has a keyboard shortcut (Ctrl+1 … Ctrl+6). Items marked *Not yet* are known gaps, not hidden features.
 
 | Mail | To-do |
 | --- | --- |
@@ -66,7 +66,7 @@ What Alondra 1.3.0 does today, by workspace. Each workspace has a keyboard short
 
 ## To-do (Ctrl+3)
 
-A complete task manager that works **without any account or network**. Data is stored in `%LOCALAPPDATA%\alondra\todo.db`. [TODO.md](TODO.md) has the full checklist, file formats, and behavior.
+A complete task manager that works **without any account or network**. Data is stored in `%LOCALAPPDATA%\alondra1\todo.db`. [TODO.md](TODO.md) has the full checklist, file formats, and behavior.
 
 - **Tasks:** title, notes, steps (subtasks) with progress, importance, due date, optional time, start date, My Day, multiple reminders, repeats (daily, weekly on chosen weekdays, monthly, yearly, every N, with an end date), and attached files (copied into the data folder).
 - **Lists and groups:** emoji names, eight colors with an optional tint, collapsible groups, drag to reorder or move between groups, duplicate, and delete with undo. The default **Tasks** list cannot be deleted.
@@ -77,10 +77,10 @@ A complete task manager that works **without any account or network**. Data is s
 - **Reminders:** a reminder bar with Open, Snooze, and Dismiss, plus a Windows notification. They are correct across daylight-saving changes and never shown twice.
 - **Summary:** statistics and completion history, including each repeat of a recurring task.
 - **Undo:** 50 steps (Ctrl+Z) for every change, including deletions.
-- **Data:** export JSON (`alondra-todo` format), CSV, and iCalendar; import JSON with validation and new ids; back up now; automatic daily backup (7 kept); restore with a safety copy first; print the current view (Ctrl+P).
+- **Data:** export JSON (`alondra1-todo` format), CSV, and iCalendar; import JSON with validation and new ids; back up now; automatic daily backup (7 kept); restore with a safety copy first; print the current view (Ctrl+P).
 - **Account tasks:** Microsoft To Do and Google Tasks from connected accounts, in their own sidebar section.
 
-*Not yet:* reminders while Alondra is closed, iCalendar import, and dragging steps to reorder them (they have up and down buttons).
+*Not yet:* reminders while Alondra1 is closed, iCalendar import, and dragging steps to reorder them (they have up and down buttons).
 
 ## Notes (Ctrl+4)
 
@@ -104,9 +104,9 @@ Shown as **Soon**. There is no chat feature yet.
 ## Appearance and personalization
 
 - Light, Dark, or follow Windows. Dialog title bars follow the theme too.
-- Palette derived from the Alondra logo. Every color can be overridden per theme (Settings → Appearance → Edit light / dark colors) and reset.
+- Palette derived from the Alondra1 logo. Every color can be overridden per theme (Settings → Appearance → Edit light / dark colors) and reset.
 - **Background pictures:** seven built-in originals, or your own PNG, JPEG, or WebP. It is copied and processed locally, with opacity, blur, desaturation, brightness, overlay, position, and fit, and a live preview. Brightness adapts to the theme so text stays readable.
-- 62 custom Alondra icons.
+- 62 custom Alondra1 icons.
 - Responsive layout: as the window narrows, labels turn into icons and items move into More menus. It works down to about 470 px.
 
 ![Narrow window](screenshots/narrow.png)
@@ -123,10 +123,10 @@ Shown as **Soon**. There is no chat feature yet.
 - **Secrets** are stored with Windows DPAPI for your user account only.
 - **First launch** offers sample data, importing a configuration, or adding an account.
 - **Demo mode** (`--demo`) uses clearly labeled sample data in a temporary folder.
-- **No telemetry, ads, or Alondra servers.** Network access goes only to the mail and organizer accounts you add.
+- **No telemetry, ads, or Alondra1 servers.** Network access goes only to the mail and organizer accounts you add.
 
 ## Installation
 
-- `Alondra-setup.exe` is a per-user installer with no administrator prompt. It has a branded wizard, a Start menu shortcut, an optional desktop shortcut, and an entry in Settings → Apps.
-- Installing a newer version upgrades in place. Uninstalling removes the program but keeps `%LOCALAPPDATA%\alondra` (your settings, mail, and tasks).
+- `Alondra1-setup.exe` is a per-user installer with no administrator prompt. It has a branded wizard, a Start menu shortcut, an optional desktop shortcut, and an entry in Settings → Apps.
+- Installing a newer version upgrades in place. Uninstalling removes the program but keeps `%LOCALAPPDATA%\alondra1` (your settings, mail, and tasks).
 - The app is self-contained: no .NET installation is needed. It runs on 64-bit Windows 10 and 11.

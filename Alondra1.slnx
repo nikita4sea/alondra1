@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Alondra1.App/Alondra1.App.csproj" />
+    <Project Path="src/Alondra1.Core/Alondra1.Core.csproj" />
+    <Project Path="src/Alondra1.Mail/Alondra1.Mail.csproj" />
+    <Project Path="src/Alondra1.Persistence/Alondra1.Persistence.csproj" />
+    <Project Path="src/Alondra1.Providers/Alondra1.Providers.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Alondra1.Tests/Alondra1.Tests.csproj" />
+  </Folder>
+</Solution>

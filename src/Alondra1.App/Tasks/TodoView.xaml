@@ -1,0 +1,879 @@
+<UserControl x:Class="Alondra1.App.Tasks.TodoView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Alondra1.App.Tasks"
+             xmlns:ui="clr-namespace:Alondra1.App.Controls"
+             SizeChanged="View_SizeChanged">
+  <UserControl.Resources>
+    <!-- Round completion toggle: an empty ring that fills with a check mark. -->
+    <Style x:Key="RoundCheck" TargetType="Button">
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Width" Value="20"/>
+      <Setter Property="Height" Value="20"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Grid Background="Transparent">
+              <Ellipse x:Name="Ring" Stroke="{DynamicResource MutedBrush}" StrokeThickness="1.5"/>
+              <ui:Alondra1Icon Kind="Check" IconSize="13" x:Name="Mark" Foreground="{DynamicResource SurfaceBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Hidden"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Ring" Property="Stroke" Value="{DynamicResource BlueBrush}"/>
+                <Setter TargetName="Mark" Property="Visibility" Value="Visible"/>
+                <Setter TargetName="Mark" Property="Foreground" Value="{DynamicResource BlueBrush}"/>
+              </Trigger>
+              <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" Value="True">
+                <Setter TargetName="Ring" Property="Fill" Value="{DynamicResource SuccessBrush}"/>
+                <Setter TargetName="Ring" Property="Stroke" Value="{DynamicResource SuccessBrush}"/>
+                <Setter TargetName="Mark" Property="Visibility" Value="Visible"/>
+                <Setter TargetName="Mark" Property="Foreground" Value="{DynamicResource SurfaceBrush}"/>
+              </DataTrigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- These are plain Buttons whose "on" look comes from Tag, so assistive tools invoke the command
+         (a ToggleButton's Toggle pattern would only flip the visual state). -->
+    <Style x:Key="StarToggle" TargetType="Button" BasedOn="{StaticResource IconButton}">
+      <Setter Property="ContentTemplate"><Setter.Value><DataTemplate><ui:Alondra1Icon Kind="Priority" IconSize="18"/></DataTemplate></Setter.Value></Setter>
+      <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
+          <Setter Property="ContentTemplate"><Setter.Value><DataTemplate><ui:Alondra1Icon Kind="PriorityFilled" IconSize="18"/></DataTemplate></Setter.Value></Setter>
+          <Setter Property="Foreground" Value="{DynamicResource StarBrush}"/>
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style x:Key="ModeButton" TargetType="Button" BasedOn="{StaticResource QuietButton}">
+      <Setter Property="Margin" Value="0,0,3,0"/>
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource Self}}" Value="True">
+          <Setter Property="Background" Value="{DynamicResource SelectedBrush}"/>
+          <Setter Property="Foreground" Value="{DynamicResource BlueBrush}"/>
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style x:Key="Muted" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+
+    <!-- Section labels in the details pane: 12 px, with the standard 20 px gap between sections. -->
+    <Style x:Key="SectionLabel" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+      <Setter Property="Margin" Value="0,20,0,6"/>
+    </Style>
+
+    <Style x:Key="Row" TargetType="ListBoxItem">
+    <Setter Property="Background" Value="{DynamicResource ChromeBrush}"/>
+      <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Margin" Value="0,0,0,2"/>
+      <Setter Property="AutomationProperties.Name" Value="{Binding AccessName}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ListBoxItem">
+            <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusMd}" Padding="{TemplateBinding Padding}">
+              <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}"/>
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SelectedBrush}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="NavRow" TargetType="ListBoxItem" BasedOn="{StaticResource Row}">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Margin" Value="0,0,0,1"/>
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding IsHeader}" Value="True">
+          <Setter Property="IsEnabled" Value="False"/>
+          <Setter Property="Focusable" Value="False"/>
+          <Setter Property="Template">
+            <Setter.Value>
+              <ControlTemplate TargetType="ListBoxItem">
+                <ContentPresenter/>
+              </ControlTemplate>
+            </Setter.Value>
+          </Setter>
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style x:Key="ChipBorder" TargetType="Border">
+      <Setter Property="Background" Value="{DynamicResource SelectedBrush}"/>
+      <Setter Property="CornerRadius" Value="5"/>
+      <Setter Property="Padding" Value="5,2"/>
+      <Setter Property="Margin" Value="0,1"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding Overdue}" Value="True">
+          <Setter Property="Background" Value="{DynamicResource DangerSoftBrush}"/>
+        </DataTrigger>
+        <DataTrigger Binding="{Binding Completed}" Value="True">
+          <Setter Property="Background" Value="{DynamicResource HoverBrush}"/>
+          <Setter Property="Opacity" Value="0.7"/>
+        </DataTrigger>
+        <DataTrigger Binding="{Binding IsStartMarker}" Value="True">
+          <Setter Property="Background" Value="Transparent"/>
+          <Setter Property="BorderBrush" Value="{DynamicResource LineBrush}"/>
+          <Setter Property="BorderThickness" Value="1"/>
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <DataTemplate x:Key="ChipTemplate" DataType="{x:Type local:CalendarTaskVm}">
+      <Border Style="{StaticResource ChipBorder}" Tag="{Binding Id}" AutomationProperties.Name="{Binding AccessName}" ToolTip="{Binding Title}"
+              MouseLeftButtonDown="Chip_MouseLeftButtonDown" MouseMove="Chip_MouseMove">
+        <DockPanel>
+          <Rectangle DockPanel.Dock="Left" Width="3" RadiusX="1.5" RadiusY="1.5" Margin="0,1,4,1" Fill="{Binding Accent}"/>
+          <TextBlock DockPanel.Dock="Left" Text="{Binding TimeText}" FontSize="11" Foreground="{DynamicResource MutedBrush}" Margin="0,0,4,0"/>
+          <ui:Alondra1Icon Kind="PriorityFilled" IconSize="13" DockPanel.Dock="Right" Foreground="{DynamicResource StarBrush}" VerticalAlignment="Center" Visibility="{Binding Important, Converter={StaticResource BoolVis}}"/>
+          <TextBlock Text="{Binding Title}" FontSize="12" TextTrimming="CharacterEllipsis">
+            <TextBlock.Style>
+              <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding Completed}" Value="True">
+                    <Setter Property="TextDecorations" Value="Strikethrough"/>
+                    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+                  </DataTrigger>
+                  <DataTrigger Binding="{Binding Overdue}" Value="True">
+                    <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
+        </DockPanel>
+      </Border>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <Grid>
+    <!-- Storage could not be opened. -->
+    <Border Style="{StaticResource Pane}" Padding="16" Visibility="{Binding IsAvailable, Converter={StaticResource BoolVis}, ConverterParameter=invert}">
+      <StackPanel>
+        <TextBlock Text="Local tasks are unavailable" FontSize="16" FontWeight="SemiBold"/>
+        <TextBlock Text="{Binding StoreError}" TextWrapping="Wrap" Margin="0,8,0,0" Foreground="{DynamicResource MutedBrush}"/>
+      </StackPanel>
+    </Border>
+
+    <Grid x:Name="Root" Visibility="{Binding IsAvailable, Converter={StaticResource BoolVis}}">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition x:Name="SidebarColumn" Width="214"/>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition x:Name="DetailColumn" Width="Auto"/>
+      </Grid.ColumnDefinitions>
+
+      <!-- ===== Sidebar ===== -->
+      <Border x:Name="SidebarPane" Style="{StaticResource Pane}" Margin="0,0,6,0" Panel.ZIndex="2">
+        <DockPanel Margin="6">
+          <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
+            <Button Style="{StaticResource QuietButton}" Click="NewList_Click" AutomationProperties.Name="New list" ToolTip="New list (Ctrl+Shift+N)">
+              <StackPanel Orientation="Horizontal"><ui:Alondra1Icon Kind="Add" IconSize="15" Margin="0,0,6,0" Foreground="{DynamicResource BlueBrush}"/><TextBlock Text="New list"/></StackPanel>
+            </Button>
+            <Button Style="{StaticResource QuietButton}" Click="NewGroup_Click" AutomationProperties.Name="New group" ToolTip="New group">
+              <ui:Alondra1Icon Kind="Group" IconSize="15"  Foreground="{DynamicResource BlueBrush}"/>
+            </Button>
+          </StackPanel>
+          <ListBox x:Name="SidebarList" ItemsSource="{Binding Sidebar}" BorderThickness="0" Background="Transparent"
+                   AutomationProperties.Name="Task views and lists" ItemContainerStyle="{StaticResource NavRow}"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                   SelectionChanged="SidebarList_SelectionChanged" AllowDrop="True" DragOver="Sidebar_DragOver" Drop="Sidebar_Drop"
+                   PreviewMouseLeftButtonDown="Sidebar_PreviewMouseLeftButtonDown" PreviewMouseMove="Sidebar_PreviewMouseMove"
+                   ContextMenuOpening="Sidebar_ContextMenuOpening" PreviewKeyDown="Sidebar_PreviewKeyDown">
+            <ListBox.ContextMenu><ContextMenu/></ListBox.ContextMenu>
+            <ListBox.ItemTemplate>
+              <DataTemplate DataType="{x:Type local:SidebarItem}">
+                <Grid>
+                  <TextBlock Text="{Binding Title}" Style="{StaticResource SectionLabel}" Margin="8,10,0,2"
+                             Visibility="{Binding IsHeader, Converter={StaticResource BoolVis}}"/>
+                  <Grid Margin="{Binding Indent, Converter={StaticResource IndentConverter}}" MinHeight="34"
+                        Visibility="{Binding IsHeader, Converter={StaticResource BoolVis}, ConverterParameter=invert}">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto"/>
+                      <ColumnDefinition Width="*"/>
+                      <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Style="{StaticResource IconButton}" Width="28" Height="28" Margin="2,0,0,0"
+                            Visibility="{Binding IsGroup, Converter={StaticResource BoolVis}}"
+                            Command="{Binding DataContext.ToggleGroupCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                            AutomationProperties.Name="Expand or collapse group" Focusable="False"><ui:Alondra1Icon Kind="{Binding GroupIcon}" IconSize="14" Foreground="{DynamicResource MutedBrush}"/></Button>
+                    <Grid Width="26" Visibility="{Binding IsGroup, Converter={StaticResource BoolVis}, ConverterParameter=invert}">
+                      <ui:Alondra1Icon Kind="{Binding Icon}" IconSize="18" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <ui:Alondra1Icon.Style>
+                          <Style TargetType="ui:Alondra1Icon">
+                            <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource BlueBrush}"/>
+                              </DataTrigger>
+                              <DataTrigger Binding="{Binding IsWarning}" Value="True">
+                                <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </ui:Alondra1Icon.Style>
+                      </ui:Alondra1Icon>
+                      <Ellipse Width="9" Height="9" Fill="{Binding Accent}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,2,4"
+                               Visibility="{Binding Accent, Converter={StaticResource NotNullVis}}"/>
+                    </Grid>
+                    <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="4,0,4,0">
+                      <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsGroup}" Value="True">
+                              <Setter Property="FontWeight" Value="SemiBold"/>
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock Grid.Column="2" Text="{Binding CountText}" Margin="0,0,8,0">
+                      <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsWarning}" Value="True">
+                              <Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/>
+                              <Setter Property="FontWeight" Value="SemiBold"/>
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBlock.Style>
+                    </TextBlock>
+                  </Grid>
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </Border>
+
+      <!-- ===== Main ===== -->
+      <Border x:Name="MainPane" Grid.Column="1" Style="{StaticResource Pane}" ClipToBounds="True">
+        <Grid>
+          <Rectangle Fill="{Binding ViewAccent}" Opacity="0.07" Visibility="{Binding HasTint, Converter={StaticResource BoolVis}}" IsHitTestVisible="False" RadiusX="10" RadiusY="10"/>
+          <DockPanel Margin="12,10,12,10">
+            <!-- Header -->
+            <Grid DockPanel.Dock="Top">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <ToggleButton x:Name="SidebarToggle" Style="{StaticResource IconButton}" Margin="0,0,6,0"
+                            Visibility="Collapsed" Checked="SidebarToggle_Changed" Unchecked="SidebarToggle_Changed"
+                            AutomationProperties.Name="Show lists" ToolTip="Show lists"><ui:Alondra1Icon Kind="Menu" IconSize="18"/></ToggleButton>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <ui:Alondra1Icon Kind="{Binding ViewIcon}" IconSize="24" VerticalAlignment="Center" Margin="0,0,10,0">
+                  <ui:Alondra1Icon.Style>
+                    <Style TargetType="ui:Alondra1Icon">
+                      <Setter Property="Foreground" Value="{Binding ViewAccent}"/>
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding ViewAccent}" Value="{x:Null}">
+                          <Setter Property="Foreground" Value="{DynamicResource BlueBrush}"/>
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </ui:Alondra1Icon.Style>
+                </ui:Alondra1Icon>
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock Text="{Binding ViewTitle}" FontSize="18" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Text="{Binding ViewSubtitle}" Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                </StackPanel>
+              </StackPanel>
+              <TextBlock Grid.Column="2" Text="{Binding CountText}" Style="{StaticResource Muted}" Margin="8,0,0,0"/>
+            </Grid>
+            <Border DockPanel.Dock="Top" Height="8"/>
+
+            <!-- Bulk actions -->
+            <Border DockPanel.Dock="Top" Background="{DynamicResource SelectedBrush}" CornerRadius="{StaticResource RadiusMd}" Padding="8,4" Margin="0,0,0,6"
+                    Visibility="{Binding HasBulkSelection, Converter={StaticResource BoolVis}}">
+              <WrapPanel>
+                <TextBlock Text="{Binding BulkText}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <Button Content="Complete" Style="{StaticResource QuietButton}" Click="BulkComplete_Click" AutomationProperties.Name="Complete selected tasks"/>
+                <Button Content="Important" Style="{StaticResource QuietButton}" Click="BulkImportant_Click" AutomationProperties.Name="Mark selected tasks important"/>
+                <Button Content="My Day" Style="{StaticResource QuietButton}" Click="BulkMyDay_Click" AutomationProperties.Name="Add selected tasks to My Day"/>
+                <Button x:Name="BulkMoveButton" Content="Move to…" Style="{StaticResource QuietButton}" Click="BulkMove_Click" AutomationProperties.Name="Move selected tasks">
+                  <Button.ContextMenu><ContextMenu/></Button.ContextMenu>
+                </Button>
+                <Button Content="Delete" Style="{StaticResource QuietButton}" Foreground="{DynamicResource DangerBrush}" Click="BulkDelete_Click" AutomationProperties.Name="Delete selected tasks"/>
+                <Button Content="Clear selection" Style="{StaticResource QuietButton}" Click="ClearSelection_Click"/>
+              </WrapPanel>
+            </Border>
+
+            <!-- Quick add -->
+            <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0" Visibility="{Binding IsAccountView, Converter={StaticResource BoolVis}, ConverterParameter=invert}">
+              <Border Style="{StaticResource QuickAddField}"
+                      Visibility="{Binding IsSummaryView, Converter={StaticResource BoolVis}, ConverterParameter=invert}">
+                <DockPanel>
+                  <ui:Alondra1Icon Kind="Add" IconSize="16" DockPanel.Dock="Left" Foreground="{DynamicResource BlueBrush}" VerticalAlignment="Center" Margin="4,0,4,0"/>
+                  <Button DockPanel.Dock="Right" Content="Add" Style="{StaticResource QuietButton}" Command="{Binding QuickAddCommand}" AutomationProperties.Name="Add task"/>
+                  <Grid>
+                    <TextBox x:Name="QuickAddBox" Text="{Binding QuickAddText, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0" Background="Transparent"
+                             AutomationProperties.Name="Add a task" AutomationProperties.HelpText="Type a task. Dates such as tomorrow 3pm or every monday are recognized."
+                             KeyDown="QuickAddBox_KeyDown" TextChanged="QuickAddBox_TextChanged"/>
+                    <TextBlock IsHitTestVisible="False" Margin="9,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}"
+                               Text="Add a task — try “Call Sam tomorrow 3pm” or “Pay rent every month on the 1st”">
+                      <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                          <Setter Property="Visibility" Value="Collapsed"/>
+                          <Style.Triggers><DataTrigger Binding="{Binding Text, ElementName=QuickAddBox}" Value=""><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers>
+                        </Style>
+                      </TextBlock.Style>
+                    </TextBlock>
+                  </Grid>
+                </DockPanel>
+              </Border>
+              <TextBlock Text="{Binding QuickAddHint}" Style="{StaticResource Muted}" Margin="6,3,0,0" Visibility="{Binding HasQuickAddHint, Converter={StaticResource BoolVis}}"
+                         AutomationProperties.LiveSetting="Polite"/>
+            </StackPanel>
+
+            <!-- Toast with undo -->
+            <Border DockPanel.Dock="Bottom" Background="{DynamicResource TextBrush}" CornerRadius="{StaticResource RadiusMd}" Padding="10,5" Margin="0,8,0,0" HorizontalAlignment="Left"
+                    Visibility="{Binding HasToast, Converter={StaticResource BoolVis}}">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding ToastText}" Foreground="{DynamicResource SurfaceBrush}" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="520"
+                           AutomationProperties.LiveSetting="Polite"/>
+                <Button Content="Undo" Margin="10,0,0,0" Padding="6,2" Command="{Binding UndoCommand}" Visibility="{Binding ToastCanUndo, Converter={StaticResource BoolVis}}"
+                        AutomationProperties.Name="Undo last action">
+                  <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource QuietButton}">
+                      <Setter Property="Foreground" Value="{DynamicResource SurfaceBrush}"/>
+                      <Setter Property="FontWeight" Value="SemiBold"/>
+                    </Style>
+                  </Button.Style>
+                </Button>
+              </StackPanel>
+            </Border>
+
+            <!-- Content -->
+            <Grid>
+              <!-- Task list -->
+              <Grid Visibility="{Binding IsTaskView, Converter={StaticResource BoolVis}}">
+                <ListBox x:Name="TaskList" ItemsSource="{Binding Items}" SelectionMode="Extended" BorderThickness="0" Background="Transparent"
+                         AutomationProperties.Name="Tasks" ItemContainerStyle="{StaticResource Row}"
+                         VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" VirtualizingPanel.ScrollUnit="Pixel"
+                         ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         SelectionChanged="TaskList_SelectionChanged" PreviewKeyDown="TaskList_PreviewKeyDown"
+                         PreviewMouseLeftButtonDown="TaskList_PreviewMouseLeftButtonDown" PreviewMouseMove="TaskList_PreviewMouseMove"
+                         AllowDrop="True" DragOver="TaskList_DragOver" Drop="TaskList_Drop" DragLeave="TaskList_DragLeave"
+                         ContextMenuOpening="TaskList_ContextMenuOpening">
+                  <ListBox.ContextMenu><ContextMenu/></ListBox.ContextMenu>
+                  <ListBox.ItemTemplate>
+                    <DataTemplate DataType="{x:Type local:TaskItemVm}">
+                      <Grid MinHeight="46">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="4"/>
+                          <ColumnDefinition Width="Auto"/>
+                          <ColumnDefinition Width="*"/>
+                          <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Rectangle Fill="{Binding ListAccent}" RadiusX="2" RadiusY="2" Margin="0,6"/>
+                        <Button Grid.Column="1" Style="{StaticResource RoundCheck}" Margin="8,0,10,0" VerticalAlignment="Center"
+                                      Tag="{Binding Completed}"
+                                      Command="{Binding DataContext.ToggleCompleteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                                      AutomationProperties.Name="{Binding Title, StringFormat='Complete {0}'}" ToolTip="Complete (Ctrl+Enter)"/>
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,5">
+                          <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis">
+                            <TextBlock.Style>
+                              <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                                <Style.Triggers>
+                                  <DataTrigger Binding="{Binding Completed}" Value="True">
+                                    <Setter Property="TextDecorations" Value="Strikethrough"/>
+                                    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+                                  </DataTrigger>
+                                </Style.Triggers>
+                              </Style>
+                            </TextBlock.Style>
+                          </TextBlock>
+                          <WrapPanel Visibility="{Binding HasMeta, Converter={StaticResource BoolVis}}" Margin="0,2,0,0">
+                            <TextBlock Text="{Binding ContextText}" Style="{StaticResource Muted}" Margin="0,0,8,0" Visibility="{Binding HasContext, Converter={StaticResource BoolVis}}"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,8,0" Visibility="{Binding HasDue, Converter={StaticResource BoolVis}}">
+                              <ui:Alondra1Icon Kind="Calendar" IconSize="13" VerticalAlignment="Center" Margin="0,0,4,0">
+                                <ui:Alondra1Icon.Style>
+                                  <Style TargetType="ui:Alondra1Icon">
+                                    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+                                    <Style.Triggers>
+                                      <DataTrigger Binding="{Binding IsDueSoon}" Value="True"><Setter Property="Foreground" Value="{DynamicResource BlueBrush}"/></DataTrigger>
+                                      <DataTrigger Binding="{Binding IsOverdue}" Value="True"><Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/></DataTrigger>
+                                    </Style.Triggers>
+                                  </Style>
+                                </ui:Alondra1Icon.Style>
+                              </ui:Alondra1Icon>
+                              <TextBlock Text="{Binding DueText}" FontSize="11" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                  <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+                                    <Style.Triggers>
+                                      <DataTrigger Binding="{Binding IsDueSoon}" Value="True"><Setter Property="Foreground" Value="{DynamicResource BlueBrush}"/></DataTrigger>
+                                      <DataTrigger Binding="{Binding IsOverdue}" Value="True"><Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/><Setter Property="FontWeight" Value="SemiBold"/></DataTrigger>
+                                    </Style.Triggers>
+                                  </Style>
+                                </TextBlock.Style>
+                              </TextBlock>
+                            </StackPanel>
+                            <ui:Alondra1Icon Kind="Recurrence" IconSize="16" Visibility="{Binding IsRecurring, Converter={StaticResource BoolVis}}" ToolTip="Repeats" Foreground="{DynamicResource MutedBrush}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <ui:Alondra1Icon Kind="Reminder" IconSize="16" Visibility="{Binding HasReminder, Converter={StaticResource BoolVis}}" ToolTip="Reminder" Foreground="{DynamicResource MutedBrush}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,8,0" Visibility="{Binding HasSteps, Converter={StaticResource BoolVis}}" ToolTip="Steps completed">
+                              <Grid Width="28" Height="4" VerticalAlignment="Center" Margin="0,0,4,0">
+                                <Border Background="{DynamicResource LineBrush}" CornerRadius="2"/>
+                                <ProgressBar Value="{Binding Progress, Mode=OneWay}" Maximum="1" Height="4" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource SuccessBrush}"/>
+                              </Grid>
+                              <TextBlock Text="{Binding StepsText}" Style="{StaticResource Muted}"/>
+                            </StackPanel>
+                            <ui:Alondra1Icon Kind="Notes" IconSize="16" Visibility="{Binding HasNotes, Converter={StaticResource BoolVis}}" ToolTip="Has a note" Foreground="{DynamicResource MutedBrush}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                            <ui:Alondra1Icon Kind="Attachment" IconSize="16" Visibility="{Binding HasAttachments, Converter={StaticResource BoolVis}}" ToolTip="Has files" Foreground="{DynamicResource MutedBrush}" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                          </WrapPanel>
+                        </StackPanel>
+                        <Button Grid.Column="3" Style="{StaticResource StarToggle}" Tag="{Binding Important}" VerticalAlignment="Center" Margin="4,0,6,0"
+                                      Command="{Binding DataContext.ToggleImportantCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                                      AutomationProperties.Name="{Binding Title, StringFormat='Mark {0} as important'}" ToolTip="Important (Ctrl+I)"/>
+                      </Grid>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+                <Border x:Name="DropLine" Height="2" Background="{DynamicResource BlueBrush}" VerticalAlignment="Top" IsHitTestVisible="False" Visibility="Collapsed"/>
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="360" Visibility="{Binding IsEmpty, Converter={StaticResource BoolVis}}" IsHitTestVisible="False">
+                  <ui:Alondra1Icon Kind="{Binding ViewIcon}" IconSize="40" Foreground="{DynamicResource MutedBrush}" HorizontalAlignment="Center" Opacity="0.6"/>
+                  <TextBlock Text="{Binding EmptyTitle}" FontSize="15" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,10,0,4"/>
+                  <TextBlock Text="{Binding EmptyText}" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" TextAlignment="Center"/>
+                </StackPanel>
+              </Grid>
+
+              <!-- Calendar -->
+              <DockPanel Visibility="{Binding IsCalendarView, Converter={StaticResource BoolVis}}" Margin="0,8,0,0">
+                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                  <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <Button Style="{StaticResource QuietButton}" Command="{Binding CalendarPrevCommand}" AutomationProperties.Name="Previous" ToolTip="Previous (Alt+Left)"><ui:Alondra1Icon Kind="Back" IconSize="16"/></Button>
+                    <Button Content="Today" Style="{StaticResource QuietButton}" Command="{Binding CalendarTodayCommand}" AutomationProperties.Name="Go to today"/>
+                    <Button Style="{StaticResource QuietButton}" Command="{Binding CalendarNextCommand}" AutomationProperties.Name="Next" ToolTip="Next (Alt+Right)"><ui:Alondra1Icon Kind="ChevronRight" IconSize="16"/></Button>
+                    <TextBlock Text="{Binding CalendarTitle}" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0" AutomationProperties.LiveSetting="Polite"/>
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <Button Content="Day" Style="{StaticResource ModeButton}" Tag="{Binding IsDayMode}" Command="{Binding CalendarModeCommand}" CommandParameter="Day" AutomationProperties.Name="Day view"/>
+                    <Button Content="Week" Style="{StaticResource ModeButton}" Tag="{Binding IsWeekMode}" Command="{Binding CalendarModeCommand}" CommandParameter="Week" AutomationProperties.Name="Week view"/>
+                    <Button Content="Month" Style="{StaticResource ModeButton}" Tag="{Binding IsMonthMode}" Command="{Binding CalendarModeCommand}" CommandParameter="Month" AutomationProperties.Name="Month view"/>
+                  </StackPanel>
+                </DockPanel>
+                <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Muted}" Margin="0,6,0,0" TextWrapping="Wrap"
+                           Text="{Binding CalendarSelectedText, StringFormat='New tasks are due {0}. Drag a task to another day to reschedule it; double-click a day to open it.'}"/>
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition x:Name="BacklogColumn" Width="190"/>
+                  </Grid.ColumnDefinitions>
+
+                  <!-- Month and week -->
+                  <DockPanel Visibility="{Binding IsDayMode, Converter={StaticResource BoolVis}, ConverterParameter=invert}">
+                    <UniformGrid DockPanel.Dock="Top" Columns="7" Margin="0,0,0,2" Visibility="{Binding IsMonthMode, Converter={StaticResource BoolVis}}">
+                      <TextBlock Text="Mon" Style="{StaticResource Muted}" Margin="4,0"/><TextBlock Text="Tue" Style="{StaticResource Muted}" Margin="4,0"/>
+                      <TextBlock Text="Wed" Style="{StaticResource Muted}" Margin="4,0"/><TextBlock Text="Thu" Style="{StaticResource Muted}" Margin="4,0"/>
+                      <TextBlock Text="Fri" Style="{StaticResource Muted}" Margin="4,0"/><TextBlock Text="Sat" Style="{StaticResource Muted}" Margin="4,0"/>
+                      <TextBlock Text="Sun" Style="{StaticResource Muted}" Margin="4,0"/>
+                    </UniformGrid>
+                    <ItemsControl x:Name="CalendarGrid" ItemsSource="{Binding CalendarCells}" AutomationProperties.Name="Calendar grid" KeyboardNavigation.TabNavigation="Once">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><UniformGrid Columns="7"/></ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type local:CalendarCellVm}">
+                          <Border Margin="1" CornerRadius="{StaticResource RadiusSm}" BorderThickness="1" Padding="4,2" AllowDrop="True" Tag="{Binding}" Focusable="True"
+                                  FocusVisualStyle="{StaticResource FocusRing}" KeyboardNavigation.IsTabStop="True"
+                                  AutomationProperties.Name="{Binding AccessName}"
+                                  DragOver="CalendarCell_DragOver" Drop="CalendarCell_Drop" DragLeave="CalendarCell_DragLeave"
+                                  MouseLeftButtonDown="CalendarCell_MouseLeftButtonDown" KeyDown="CalendarCell_KeyDown">
+                            <Border.Style>
+                              <Style TargetType="Border">
+                                <Setter Property="Background" Value="{DynamicResource ChromeBrush}"/>
+                                <Setter Property="BorderBrush" Value="Transparent"/>
+                                <Setter Property="MinHeight" Value="72"/>
+                                <Style.Triggers>
+                                  <DataTrigger Binding="{Binding InMonth}" Value="False"><Setter Property="Opacity" Value="0.5"/></DataTrigger>
+                                  <DataTrigger Binding="{Binding IsSelected}" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource BlueBrush}"/></DataTrigger>
+                                  <DataTrigger Binding="{Binding DataContext.IsWeekMode, RelativeSource={RelativeSource AncestorType=UserControl}}" Value="True"><Setter Property="MinHeight" Value="260"/></DataTrigger>
+                                </Style.Triggers>
+                              </Style>
+                            </Border.Style>
+                            <DockPanel>
+                              <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,2">
+                                <Border CornerRadius="9" MinWidth="20" Padding="4,0">
+                                  <Border.Style>
+                                    <Style TargetType="Border">
+                                      <Style.Triggers><DataTrigger Binding="{Binding IsToday}" Value="True"><Setter Property="Background" Value="{DynamicResource BlueBrush}"/></DataTrigger></Style.Triggers>
+                                    </Style>
+                                  </Border.Style>
+                                  <TextBlock Text="{Binding DayText}" FontSize="12" HorizontalAlignment="Center">
+                                    <TextBlock.Style>
+                                      <Style TargetType="TextBlock">
+                                        <Style.Triggers><DataTrigger Binding="{Binding IsToday}" Value="True"><Setter Property="Foreground" Value="{DynamicResource SurfaceBrush}"/><Setter Property="FontWeight" Value="SemiBold"/></DataTrigger></Style.Triggers>
+                                      </Style>
+                                    </TextBlock.Style>
+                                  </TextBlock>
+                                </Border>
+                                <TextBlock Text="{Binding Header}" Style="{StaticResource Muted}" Margin="4,0,0,0"/>
+                              </StackPanel>
+                              <TextBlock DockPanel.Dock="Bottom" Text="{Binding MoreText}" Style="{StaticResource Muted}" Visibility="{Binding HasMore, Converter={StaticResource BoolVis}}"/>
+                              <ItemsControl ItemsSource="{Binding Tasks}" ItemTemplate="{StaticResource ChipTemplate}"/>
+                            </DockPanel>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </DockPanel>
+
+                  <!-- Day -->
+                  <ScrollViewer x:Name="DayScroll" VerticalScrollBarVisibility="Auto" Visibility="{Binding IsDayMode, Converter={StaticResource BoolVis}}">
+                    <ItemsControl ItemsSource="{Binding DaySlots}" AutomationProperties.Name="Day schedule">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type local:DaySlotVm}">
+                          <Border BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,0,0,1" MinHeight="34" AllowDrop="True" Tag="{Binding}" Background="Transparent"
+                                  DragOver="DaySlot_DragOver" Drop="DaySlot_Drop" DragLeave="CalendarCell_DragLeave">
+                            <Grid>
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="72"/>
+                                <ColumnDefinition Width="*"/>
+                              </Grid.ColumnDefinitions>
+                              <TextBlock Text="{Binding Label}" VerticalAlignment="Top" Margin="0,6,0,0">
+                                <TextBlock.Style>
+                                  <Style TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+                                    <Style.Triggers><DataTrigger Binding="{Binding IsNow}" Value="True"><Setter Property="Foreground" Value="{DynamicResource BlueBrush}"/><Setter Property="FontWeight" Value="SemiBold"/></DataTrigger></Style.Triggers>
+                                  </Style>
+                                </TextBlock.Style>
+                              </TextBlock>
+                              <ItemsControl Grid.Column="1" ItemsSource="{Binding Tasks}" ItemTemplate="{StaticResource ChipTemplate}" Margin="0,3"/>
+                            </Grid>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </ScrollViewer>
+
+                  <!-- Backlog -->
+                  <Border x:Name="BacklogPane" Grid.Column="1" Margin="8,0,0,0" Background="{DynamicResource ChromeBrush}" CornerRadius="{StaticResource RadiusMd}" Padding="6">
+                    <DockPanel>
+                      <TextBlock DockPanel.Dock="Top" Text="Overdue and unscheduled" Style="{StaticResource SectionLabel}" Margin="2,0,0,4"/>
+                      <TextBlock DockPanel.Dock="Top" Text="Nothing waiting. Drag tasks here from a list to plan them." Style="{StaticResource Muted}" TextWrapping="Wrap"
+                                 Visibility="{Binding HasBacklog, Converter={StaticResource BoolVis}, ConverterParameter=invert}"/>
+                      <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Backlog}" ItemTemplate="{StaticResource ChipTemplate}" AutomationProperties.Name="Overdue and unscheduled tasks"/>
+                      </ScrollViewer>
+                    </DockPanel>
+                  </Border>
+                </Grid>
+              </DockPanel>
+
+              <!-- Summary -->
+              <ScrollViewer Visibility="{Binding IsSummaryView, Converter={StaticResource BoolVis}}" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
+                <StackPanel>
+                  <TextBlock Text="{Binding SummaryText}" Margin="0,0,0,10"/>
+                  <ItemsControl ItemsSource="{Binding Tiles}" AutomationProperties.Name="Task statistics">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="{x:Type local:StatTile}">
+                        <Border Background="{DynamicResource ChromeBrush}" CornerRadius="{StaticResource RadiusLg}" Padding="12,8" Margin="0,0,8,8" Width="150"
+                                AutomationProperties.Name="{Binding Label}" AutomationProperties.HelpText="{Binding Value}">
+                          <StackPanel>
+                            <TextBlock Text="{Binding Value}" FontSize="22" FontWeight="SemiBold">
+                              <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                  <Style.Triggers><DataTrigger Binding="{Binding Warning}" Value="True"><Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/></DataTrigger></Style.Triggers>
+                                </Style>
+                              </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="{Binding Label}" Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <TextBlock Text="Completed in the last 7 days" Style="{StaticResource SectionLabel}"/>
+                  <ItemsControl ItemsSource="{Binding DayBars}" Height="122" AutomationProperties.Name="Completions per day">
+                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="{x:Type local:DayBar}">
+                        <StackPanel Width="46" VerticalAlignment="Bottom" AutomationProperties.Name="{Binding AccessName}" Focusable="True" FocusVisualStyle="{StaticResource FocusRing}">
+                          <TextBlock Text="{Binding Count}" Style="{StaticResource Muted}" HorizontalAlignment="Center"/>
+                          <Border Height="{Binding Height}" Width="22" Background="{DynamicResource BlueBrush}" CornerRadius="3,3,0,0" HorizontalAlignment="Center"/>
+                          <TextBlock Text="{Binding Label}" Style="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                        </StackPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <TextBlock Text="Completion history" Style="{StaticResource SectionLabel}"/>
+                  <TextBlock Text="Completed tasks appear here, including each occurrence of a repeating task." Style="{StaticResource Muted}"
+                             Visibility="{Binding RecentHistory.Count, Converter={StaticResource ZeroVis}}"/>
+                  <ItemsControl ItemsSource="{Binding RecentHistory}" AutomationProperties.Name="Recently completed tasks">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="{x:Type local:HistoryRow}">
+                        <DockPanel Margin="0,2">
+                          <TextBlock DockPanel.Dock="Right" Text="{Binding When}" Style="{StaticResource Muted}" Margin="8,0,0,0"/>
+                          <ui:Alondra1Icon Kind="Check" IconSize="14" Foreground="{DynamicResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                          <TextBlock Text="{Binding ListName}" Style="{StaticResource Muted}" DockPanel.Dock="Right" Margin="8,0,0,0"/>
+                          <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis"/>
+                        </DockPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </ScrollViewer>
+
+              <!-- Account tasks (existing provider view) -->
+              <ScrollViewer Visibility="{Binding IsAccountView, Converter={StaticResource BoolVis}}" VerticalScrollBarVisibility="Auto" Margin="0,8,0,0">
+                <StackPanel>
+                  <TextBlock Text="{Binding Host.OrganizerNotice}" Foreground="{DynamicResource MutedBrush}" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                  <DockPanel Margin="0,0,0,6">
+                    <TextBlock Text="{Binding Host.TaskCountText}" Style="{StaticResource Muted}" DockPanel.Dock="Right"/>
+                    <CheckBox x:Name="TaskGrouping" Content="Group by folder" Checked="TaskGrouping_Changed" Unchecked="TaskGrouping_Changed" Foreground="{DynamicResource TextBrush}"/>
+                  </DockPanel>
+                  <ItemsControl x:Name="AccountTaskList" ItemsSource="{Binding Host.Tasks}">
+                    <ItemsControl.GroupStyle>
+                      <GroupStyle>
+                        <GroupStyle.HeaderTemplate>
+                          <DataTemplate><TextBlock Text="{Binding Name}" Margin="4,6,0,3" FontWeight="SemiBold"/></DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                      </GroupStyle>
+                    </ItemsControl.GroupStyle>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <Border Background="{DynamicResource ChromeBrush}" CornerRadius="{StaticResource RadiusMd}" Margin="0,2" Padding="6">
+                          <CheckBox IsChecked="{Binding Done}" Content="{Binding Title}" Command="{Binding DataContext.Host.ToggleTaskCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                                    Foreground="{DynamicResource TextBrush}"/>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <DockPanel Margin="0,8,0,0">
+                    <Button Content="Add" DockPanel.Dock="Right" Style="{StaticResource QuietButton}" Command="{Binding Host.AddTaskCommand}" AutomationProperties.Name="Add account task"/>
+                    <TextBox Text="{Binding Host.NewTaskTitle, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="New account task"/>
+                  </DockPanel>
+                </StackPanel>
+              </ScrollViewer>
+            </Grid>
+          </DockPanel>
+        </Grid>
+      </Border>
+
+      <!-- ===== Details ===== -->
+      <Border x:Name="DetailPane" Grid.Column="2" Style="{StaticResource Pane}" Margin="6,0,0,0" Width="320" Panel.ZIndex="2"
+              Visibility="{Binding HasDetail, Converter={StaticResource BoolVis}}" AllowDrop="True" DragOver="DetailPane_DragOver" Drop="DetailPane_Drop">
+        <DockPanel>
+          <DockPanel DockPanel.Dock="Bottom" Margin="16,8,12,12">
+            <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Foreground="{DynamicResource DangerBrush}" Click="DetailDelete_Click" AutomationProperties.Name="Delete task" ToolTip="Delete task (Del)"><ui:Alondra1Icon Kind="Delete" IconSize="16"/></Button>
+            <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Click="DetailDuplicate_Click" AutomationProperties.Name="Duplicate task" ToolTip="Duplicate (Ctrl+D)"><ui:Alondra1Icon Kind="Copy" IconSize="16"/></Button>
+            <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Command="{Binding CloseDetailCommand}" AutomationProperties.Name="Hide details" ToolTip="Hide details (Esc)"><ui:Alondra1Icon Kind="Next" IconSize="16"/></Button>
+            <TextBlock Text="{Binding DetailCreatedText}" Style="{StaticResource Muted}" TextWrapping="Wrap"/>
+          </DockPanel>
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="16,16,16,24">
+              <!-- Title -->
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto"/>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Button Style="{StaticResource RoundCheck}" Tag="{Binding DetailCompleted}" Command="{Binding ToggleDetailCompleteCommand}"
+                              VerticalAlignment="Top" Margin="0,7,8,0" AutomationProperties.Name="Completed"/>
+                <TextBox x:Name="DetailTitleBox" Grid.Column="1" Text="{Binding DetailTitle, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource InlineEditor}" FontSize="16" FontWeight="SemiBold"
+                         TextWrapping="Wrap" AutomationProperties.Name="Task title" TextChanged="DetailTitle_TextChanged" LostFocus="DetailTitle_LostFocus" KeyDown="DetailTitle_KeyDown"/>
+                <Button Grid.Column="2" Style="{StaticResource StarToggle}" Tag="{Binding DetailImportant}" Command="{Binding ToggleDetailImportantCommand}"
+                              VerticalAlignment="Top" Margin="4,4,0,0" AutomationProperties.Name="Important"/>
+              </Grid>
+
+              <!-- Steps -->
+              <DockPanel Margin="0,12,0,4" Visibility="{Binding DetailHasSteps, Converter={StaticResource BoolVis}}">
+                <TextBlock Text="{Binding DetailProgressText}" Style="{StaticResource Muted}" DockPanel.Dock="Right" Margin="8,0,0,0"/>
+                <Grid Height="4" VerticalAlignment="Center">
+                  <Border Background="{DynamicResource LineBrush}" CornerRadius="2"/>
+                  <ProgressBar Value="{Binding DetailProgress, Mode=OneWay}" Maximum="1" Height="4" BorderThickness="0" Background="Transparent" Foreground="{DynamicResource SuccessBrush}"
+                               AutomationProperties.Name="Step progress"/>
+                </Grid>
+              </DockPanel>
+              <ItemsControl ItemsSource="{Binding Steps}" AutomationProperties.Name="Steps" Margin="0,4,0,0">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="{x:Type local:SubtaskVm}">
+                    <Grid Margin="0,1">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                      </Grid.ColumnDefinitions>
+                      <Button Style="{StaticResource RoundCheck}" Width="16" Height="16" Margin="2,0,8,0" Tag="{Binding Completed}"
+                                    Command="{Binding DataContext.ToggleStepCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                                    AutomationProperties.Name="{Binding Title, StringFormat='Complete step {0}'}"/>
+                      <TextBox Grid.Column="1" Text="{Binding Title, Mode=OneWay}" TextWrapping="Wrap" Tag="{Binding Id}"
+                               LostFocus="Step_LostFocus" KeyDown="Step_KeyDown" AutomationProperties.Name="Step">
+                        <TextBox.Style>
+                          <Style TargetType="TextBox" BasedOn="{StaticResource InlineEditor}">
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding Completed}" Value="True">
+                                <Setter Property="TextDecorations" Value="Strikethrough"/>
+                                <Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/>
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </TextBox.Style>
+                      </TextBox>
+                      <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <Button Style="{StaticResource IconButton}" Width="28" Height="28" Command="{Binding DataContext.StepUpCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" AutomationProperties.Name="Move step up" ToolTip="Move up"><ui:Alondra1Icon Kind="ChevronUp" IconSize="14"/></Button>
+                        <Button Style="{StaticResource IconButton}" Width="28" Height="28" Command="{Binding DataContext.StepDownCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" AutomationProperties.Name="Move step down" ToolTip="Move down"><ui:Alondra1Icon Kind="ChevronDown" IconSize="14"/></Button>
+                        <Button Style="{StaticResource IconButton}" Width="28" Height="28" Command="{Binding DataContext.PromoteStepCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" AutomationProperties.Name="Turn step into a task" ToolTip="Turn into task"><ui:Alondra1Icon Kind="Promote" IconSize="14"/></Button>
+                        <Button Style="{StaticResource IconButton}" Width="28" Height="28" Command="{Binding DataContext.DeleteStepCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" AutomationProperties.Name="Delete step" ToolTip="Delete step"><ui:Alondra1Icon Kind="Close" IconSize="14"/></Button>
+                      </StackPanel>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <Grid Margin="0,2,0,0">
+                <TextBox x:Name="NewStepBox" Text="{Binding NewStepText, UpdateSourceTrigger=PropertyChanged}" KeyDown="NewStep_KeyDown" AutomationProperties.Name="Add step" Padding="26,5,8,5"/>
+                <ui:Alondra1Icon Kind="Add" IconSize="14" Foreground="{DynamicResource BlueBrush}" Margin="9,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                <TextBlock Text="Add step" IsHitTestVisible="False" Margin="27,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}">
+                  <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                      <Setter Property="Visibility" Value="Collapsed"/>
+                      <Style.Triggers><DataTrigger Binding="{Binding Text, ElementName=NewStepBox}" Value=""><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers>
+                    </Style>
+                  </TextBlock.Style>
+                </TextBlock>
+              </Grid>
+
+              <!-- My Day -->
+              <Button Style="{StaticResource ModeButton}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Margin="0,16,0,0" Padding="8,0" MinHeight="{StaticResource ControlMd}"
+                            Tag="{Binding DetailInMyDay}" Command="{Binding ToggleMyDayCommand}"
+                            AutomationProperties.Name="{Binding DetailMyDayText}" ToolTip="Ctrl+T">
+                <StackPanel Orientation="Horizontal">
+                  <ui:Alondra1Icon Kind="Sun" IconSize="16" Margin="0,0,8,0" Foreground="{DynamicResource BlueBrush}"/>
+                  <TextBlock Text="{Binding DetailMyDayText}"/>
+                </StackPanel>
+              </Button>
+
+              <!-- Dates -->
+              <TextBlock Text="DUE" Style="{StaticResource SectionLabel}"/>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="112"/>
+                  <ColumnDefinition Width="40"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="DueBox" Text="{Binding DetailDueText, UpdateSourceTrigger=PropertyChanged}" LostFocus="Due_LostFocus" KeyDown="CommitOnEnter"
+                         AutomationProperties.Name="Due date" ToolTip="A date, or words like tomorrow, fri, next week, dec 24"/>
+                <TextBox x:Name="TimeBox" Grid.Column="1" Margin="6,0,0,0" Text="{Binding DetailTimeText, UpdateSourceTrigger=PropertyChanged}" LostFocus="Time_LostFocus" KeyDown="CommitOnEnter"
+                         AutomationProperties.Name="Due time" ToolTip="Optional time slot, such as 14:30"/>
+                <Button Grid.Column="2" Style="{StaticResource IconButton}" HorizontalAlignment="Right" Command="{Binding SetDueCommand}" CommandParameter="clear"
+                        AutomationProperties.Name="Remove due date" ToolTip="Remove due date"><ui:Alondra1Icon Kind="Close" IconSize="14"/></Button>
+              </Grid>
+              <TextBlock Text="{Binding DetailDueLabel}" Margin="2,3,0,0">
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock" BasedOn="{StaticResource Muted}">
+                    <Style.Triggers><DataTrigger Binding="{Binding DetailOverdue}" Value="True"><Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/><Setter Property="FontWeight" Value="SemiBold"/></DataTrigger></Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
+              <UniformGrid Columns="3" Margin="0,2,0,0">
+                <Button Content="Today" Style="{StaticResource CompactButton}" Margin="0,6,6,0" Padding="4,0" HorizontalAlignment="Stretch" Command="{Binding SetDueCommand}" CommandParameter="today" AutomationProperties.Name="Due today"/>
+                <Button Content="Tomorrow" Style="{StaticResource CompactButton}" Margin="0,6,6,0" Padding="4,0" HorizontalAlignment="Stretch" Command="{Binding SetDueCommand}" CommandParameter="tomorrow" AutomationProperties.Name="Due tomorrow"/>
+                <Button Content="Next week" Style="{StaticResource CompactButton}" Margin="0,6,0,0" Padding="4,0" HorizontalAlignment="Stretch" Command="{Binding SetDueCommand}" CommandParameter="nextweek" AutomationProperties.Name="Due next week"/>
+              </UniformGrid>
+              <TextBlock Text="START" Style="{StaticResource SectionLabel}"/>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="112"/>
+                  <ColumnDefinition Width="40"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="StartBox" Text="{Binding DetailStartText, UpdateSourceTrigger=PropertyChanged}" LostFocus="Start_LostFocus" KeyDown="CommitOnEnter"
+                         AutomationProperties.Name="Start date" ToolTip="When you plan to begin. Shows on the calendar."/>
+              </Grid>
+              <TextBlock Text="{Binding DetailStartLabel}" Style="{StaticResource Muted}" Margin="2,3,0,0"/>
+
+              <!-- Repeat -->
+              <TextBlock Text="REPEAT" Style="{StaticResource SectionLabel}"/>
+              <ComboBox x:Name="RepeatBox" ItemsSource="{Binding RecurrenceOptions}" SelectedIndex="{Binding DetailRecurrenceIndex, Mode=OneWay}"
+                        DropDownClosed="RepeatBox_DropDownClosed" AutomationProperties.Name="Repeat"/>
+              <TextBlock Text="{Binding DetailRecurrenceText}" Style="{StaticResource Muted}" Margin="2,3,0,0" TextWrapping="Wrap"/>
+
+              <!-- Reminders -->
+              <TextBlock Text="REMINDERS" Style="{StaticResource SectionLabel}"/>
+              <ItemsControl ItemsSource="{Binding Reminders}" AutomationProperties.Name="Reminders">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="{x:Type local:ReminderVm}">
+                    <DockPanel Margin="0,1">
+                      <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Width="28" Height="28" Command="{Binding DataContext.RemoveReminderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" AutomationProperties.Name="Remove reminder"><ui:Alondra1Icon Kind="Close" IconSize="14"/></Button>
+                      <ui:Alondra1Icon Kind="Reminder" IconSize="14" Foreground="{DynamicResource BlueBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                      <TextBlock Text="{Binding Text}" VerticalAlignment="Center" TextWrapping="Wrap">
+                        <TextBlock.Style>
+                          <Style TargetType="TextBlock">
+                            <Style.Triggers><DataTrigger Binding="{Binding Past}" Value="True"><Setter Property="Foreground" Value="{DynamicResource MutedBrush}"/></DataTrigger></Style.Triggers>
+                          </Style>
+                        </TextBlock.Style>
+                      </TextBlock>
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <Button x:Name="AddReminderButton" Style="{StaticResource ActionButton}" Click="AddReminder_Click" AutomationProperties.Name="Add reminder">
+                <StackPanel Orientation="Horizontal"><ui:Alondra1Icon Kind="Add" IconSize="15" Margin="0,0,6,0" Foreground="{DynamicResource BlueBrush}"/><TextBlock Text="Add reminder"/></StackPanel>
+                <Button.ContextMenu><ContextMenu/></Button.ContextMenu>
+              </Button>
+
+              <!-- List -->
+              <TextBlock Text="LIST" Style="{StaticResource SectionLabel}"/>
+              <ComboBox x:Name="DetailListBox" ItemsSource="{Binding ListChoices}" SelectedItem="{Binding DetailList, Mode=OneWay}" DisplayMemberPath="Name"
+                        DropDownClosed="DetailListBox_DropDownClosed" AutomationProperties.Name="List"/>
+
+              <!-- Files -->
+              <TextBlock Text="FILES" Style="{StaticResource SectionLabel}"/>
+              <ItemsControl ItemsSource="{Binding Attachments}" AutomationProperties.Name="Attached files">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="{x:Type local:AttachmentVm}">
+                    <DockPanel Margin="0,1">
+                      <Button DockPanel.Dock="Right" Style="{StaticResource IconButton}" Width="28" Height="28" Tag="{Binding Id}" Click="RemoveAttachment_Click" AutomationProperties.Name="Remove file"><ui:Alondra1Icon Kind="Close" IconSize="14"/></Button>
+                      <Button Style="{StaticResource QuietButton}" HorizontalContentAlignment="Left" Tag="{Binding Id}" Click="OpenAttachment_Click"
+                              AutomationProperties.Name="{Binding FileName, StringFormat='Open {0}'}">
+                        <StackPanel Orientation="Horizontal">
+                          <ui:Alondra1Icon Kind="Attachment" IconSize="14" Foreground="{DynamicResource BlueBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                          <TextBlock Text="{Binding FileName}" TextTrimming="CharacterEllipsis" MaxWidth="180"/>
+                          <TextBlock Text="{Binding SizeText}" Style="{StaticResource Muted}" Margin="6,0,0,0"/>
+                          <TextBlock Text="missing" Foreground="{DynamicResource DangerBrush}" FontSize="11" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="{Binding Missing, Converter={StaticResource BoolVis}}"/>
+                        </StackPanel>
+                      </Button>
+                    </DockPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <Button Style="{StaticResource ActionButton}" Click="AddFile_Click" AutomationProperties.Name="Attach a file" ToolTip="Files are copied into Alondra1's data folder. You can also drop files here.">
+                <StackPanel Orientation="Horizontal"><ui:Alondra1Icon Kind="Attachment" IconSize="15" Margin="0,0,6,0" Foreground="{DynamicResource BlueBrush}"/><TextBlock Text="Attach file"/></StackPanel>
+              </Button>
+
+              <!-- Notes -->
+              <TextBlock Text="NOTE" Style="{StaticResource SectionLabel}"/>
+              <TextBox x:Name="NotesBox" Text="{Binding DetailNotes, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" AcceptsTab="False" TextWrapping="Wrap" MinHeight="90"
+                       VerticalScrollBarVisibility="Auto" MaxHeight="320" AutomationProperties.Name="Note" TextChanged="Notes_TextChanged" LostFocus="Notes_LostFocus"/>
+            </StackPanel>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+    </Grid>
+  </Grid>
+</UserControl>

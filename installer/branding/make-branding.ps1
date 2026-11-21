@@ -1,6 +1,6 @@
-# Renders the Alondra setup wizard images from bird-1024.png (the transparent logo cutout).
+# Renders the Alondra1 setup wizard images from bird-1024.png (the transparent logo cutout).
 # Output: wizard-<w>.bmp (Welcome/Finish side panel) and small-<s>.bmp (page header), one per Windows DPI scale,
-# plus docs/images/alondra-banner.png for the README.
+# plus docs/images/alondra1-banner.png for the README.
 # Run with Windows PowerShell:  powershell -NoProfile -ExecutionPolicy Bypass -File installer\branding\make-branding.ps1
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
@@ -11,7 +11,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Drawing.Text;
 
-public static class AlondraBranding
+public static class Alondra1Branding
 {
     static Color C(int rgb) { return Color.FromArgb((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255); }
 
@@ -76,7 +76,7 @@ public static class AlondraBranding
             center.Alignment = StringAlignment.Center;
             using (Font title = new Font("Segoe UI Semibold", 22 * s, FontStyle.Regular, GraphicsUnit.Pixel))
             using (SolidBrush tb = new SolidBrush(C(0x2A2940)))
-                g.DrawString("Alondra", title, tb, new RectangleF(0, 160 * s, w, 34 * s), center);
+                g.DrawString("Alondra1", title, tb, new RectangleF(0, 160 * s, w, 34 * s), center);
             using (Font tag = new Font("Segoe UI", 10.5f * s, FontStyle.Regular, GraphicsUnit.Pixel))
             using (SolidBrush mb = new SolidBrush(C(0x5F5E7A)))
                 g.DrawString("Mail " + (char)0xB7 + " Calendar " + (char)0xB7 + " To-do", tag, mb, new RectangleF(0, 192 * s, w, 18 * s), center);
@@ -134,7 +134,7 @@ public static class AlondraBranding
             g.DrawImage(bird, 110, 40, 300, 300);
             using (Font title = new Font("Segoe UI Semibold", 104, FontStyle.Regular, GraphicsUnit.Pixel))
             using (SolidBrush tb = new SolidBrush(C(0x2A2940)))
-                g.DrawString("Alondra", title, tb, 455, 88);
+                g.DrawString("Alondra1", title, tb, 455, 88);
             using (Font tag = new Font("Segoe UI", 32, FontStyle.Regular, GraphicsUnit.Pixel))
             using (SolidBrush mb = new SolidBrush(C(0x5F5E7A)))
                 g.DrawString("Local-first mail, calendar, and to-do for Windows", tag, mb, 466, 236);
@@ -148,11 +148,11 @@ public static class AlondraBranding
 $here = $PSScriptRoot
 $bird = Join-Path $here "bird-1024.png"
 $docsImages = Join-Path (Split-Path -Parent (Split-Path -Parent $here)) "docs\images"
-[AlondraBranding]::Banner($bird, (Join-Path $docsImages "alondra-banner.png"))
+[Alondra1Branding]::Banner($bird, (Join-Path $docsImages "alondra1-banner.png"))
 $scales = 100, 125, 150, 175, 200, 225, 250
 foreach ($p in $scales) {
     $w = [int][math]::Round(164 * $p / 100); $h = [int][math]::Round(314 * $p / 100); $sm = [int][math]::Round(55 * $p / 100)
-    [AlondraBranding]::Wizard($bird, (Join-Path $here "wizard-$w.bmp"), $w, $h)
-    [AlondraBranding]::Small($bird, (Join-Path $here "small-$sm.bmp"), $sm)
+    [Alondra1Branding]::Wizard($bird, (Join-Path $here "wizard-$w.bmp"), $w, $h)
+    [Alondra1Branding]::Small($bird, (Join-Path $here "small-$sm.bmp"), $sm)
 }
 Get-ChildItem $here -Filter *.bmp | ForEach-Object { $_.Name }

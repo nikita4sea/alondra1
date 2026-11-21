@@ -1,6 +1,6 @@
 # Delivery notes
 
-<img src="images/alondra-logo-64.png" alt="" width="48" align="right">
+<img src="images/alondra1-logo-64.png" alt="" width="48" align="right">
 
 This is the release history, with what was verified for each release and what was not. Newest first.
 
@@ -11,24 +11,24 @@ This is the release history, with what was verified for each release and what wa
 
 **Test machine:** one PC running Windows build 10.0.26300 (DisplayVersion 26H2). That is the only OS any release was launched on.
 
-## 1.3.0: Alondra everywhere (2026-11-21)
+## 1.3.0: Alondra1 everywhere (2026-11-21)
 
-- **Naming:** every identifier now uses the Alondra name.
-  - Projects and namespaces are `Alondra.*`, the solution is `Alondra.slnx`, and the setup script is `installer/alondra.iss`.
-  - The data folder is `%LOCALAPPDATA%\alondra`.
-  - Other identifiers: the DPAPI entropy and OAuth token keys, the Microsoft To Do list the adapter creates (`alondra`), the task export format (`alondra-todo`), generated Message-IDs (`@alondra.local`), and the backup extension (`.atodo`).
+- **Naming:** every identifier now uses the Alondra1 name.
+  - Projects and namespaces are `Alondra1.*`, the solution is `Alondra1.slnx`, and the setup script is `installer/alondra1.iss`.
+  - The data folder is `%LOCALAPPDATA%\alondra1`.
+  - Other identifiers: the DPAPI entropy and OAuth token keys, the Microsoft To Do list the adapter creates (`alondra1`), the task export format (`alondra1-todo`), generated Message-IDs (`@alondra1.local`), and the backup extension (`.atodo`).
 - **Breaking change:** this release starts with a fresh data folder. Settings, local mail, tasks, and saved sign-ins from earlier builds are not carried over. Add accounts again, and import tasks from a JSON export if needed. The setup `AppId` is unchanged, so the installer still upgrades the installed program in place.
 - **Docs:** reorganized into [FEATURES](FEATURES.md), [ARCHITECTURE](ARCHITECTURE.md), [CODE-GUIDE](CODE-GUIDE.md), and [GUIDELINES](GUIDELINES.md). Logo files are in `docs/images`, and every screenshot was retaken.
 - **Verified:**
-  - `dotnet test Alondra.slnx`: 97 passed, 1 skipped (the opt-in 10 GB mailbox test).
+  - `dotnet test Alondra1.slnx`: 97 passed, 1 skipped (the opt-in 10 GB mailbox test).
   - The demo was rendered in Mail, Calendar, To-do, Notes, and Contacts, in light and dark, and at 560 px wide. Header 56 px, toolbar 48 px. No crash was logged.
   - The setup was rebuilt.
 
-## 1.2.0: Alondra brand, logo, palette, and setup wizard (2026-11-21)
+## 1.2.0: Alondra1 brand, logo, palette, and setup wizard (2026-11-21)
 
 - **Brand and logo:**
-  - The product name is Alondra: window title, header wordmark, Start menu and desktop shortcuts, Settings → Apps, `Alondra.exe`, `Alondra-setup.exe`, dialogs, and notifications.
-  - The logo is a lavender-blue bird, cut out onto a transparent background (`Assets/alondra.ico` 16–256 px, `logo-64.png`).
+  - The product name is Alondra1: window title, header wordmark, Start menu and desktop shortcuts, Settings → Apps, `Alondra1.exe`, `Alondra1-setup.exe`, dialogs, and notifications.
+  - The logo is a lavender-blue bird, cut out onto a transparent background (`Assets/alondra1.ico` 16–256 px, `logo-64.png`).
 - **Palette:** rebuilt from the logo's lavender and peach. See [UI-DESIGN.md](UI-DESIGN.md). Contrast is checked by `UiDesignTests`.
 - **Backgrounds:** pictures are more visible by default (Misty mountains, 85% opacity, 2 px blur), and brightness adapts to the theme.
 - **Setup wizard:**
@@ -109,8 +109,8 @@ These checks need environments that were not available. The client implements th
 ./installer/publish.ps1
 ```
 
-This publishes a self-contained x64 build and compiles `artifacts/Alondra-setup.exe` with Inno Setup.
+This publishes a self-contained x64 build and compiles `artifacts/Alondra1-setup.exe` with Inno Setup.
 
-The setup installs per user to `%LOCALAPPDATA%\Programs\Alondra`, adds the Alondra Start menu shortcut, and registers uninstall in Settings → Apps. It never touches `%LOCALAPPDATA%\alondra`, so updates and uninstalls keep settings, local mail, tasks, secrets, and attachment files.
+The setup installs per user to `%LOCALAPPDATA%\Programs\Alondra1`, adds the Alondra1 Start menu shortcut, and registers uninstall in Settings → Apps. It never touches `%LOCALAPPDATA%\alondra1`, so updates and uninstalls keep settings, local mail, tasks, secrets, and attachment files.
 
 Microsoft's Windows support for .NET is documented at https://learn.microsoft.com/dotnet/core/install/windows.

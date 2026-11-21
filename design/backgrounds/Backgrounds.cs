@@ -6,9 +6,9 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 
-// Generates Alondra's built-in backgrounds. All images are original, procedurally drawn artwork made for Alondra;
+// Generates Alondra1's built-in backgrounds. All images are original, procedurally drawn artwork made for Alondra1;
 // they contain no third-party content. Run design/backgrounds/generate.ps1 to rebuild them.
-public static class AlondraBackgrounds
+public static class Alondra1Backgrounds
 {
     const int W = 1920, H = 1200;
 

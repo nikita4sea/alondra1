@@ -1,15 +1,15 @@
 <p align="center">
-  <img src="docs/images/alondra-banner.png" alt="Alondra: local-first mail, calendar, and to-do for Windows" width="880">
+  <img src="docs/images/alondra1-banner.png" alt="Alondra1: local-first mail, calendar, and to-do for Windows" width="880">
 </p>
 
-**Alondra** is a calm, lightweight Windows app for your mail, calendar, tasks, notes, and contacts.
+**Alondra1** is a calm, lightweight Windows app for your mail, calendar, tasks, notes, and contacts.
 
 - **Local-first.** Your settings, local mail, and tasks live on your PC, and the To-do workspace works with no account or network at all.
-- **Private.** Alondra has no servers, no telemetry, and no ads. It connects only to the mail accounts you add.
+- **Private.** Alondra1 has no servers, no telemetry, and no ads. It connects only to the mail accounts you add.
 
 <p align="center">
-  <img src="docs/screenshots/mail-light.png" alt="Alondra mail in the light theme" width="49%">
-  <img src="docs/screenshots/todo-dark.png" alt="Alondra to-do in the dark theme" width="49%">
+  <img src="docs/screenshots/mail-light.png" alt="Alondra1 mail in the light theme" width="49%">
+  <img src="docs/screenshots/todo-dark.png" alt="Alondra1 to-do in the dark theme" width="49%">
 </p>
 
 ## Highlights
@@ -21,16 +21,16 @@
   - Dockable layout.
 - **To-do:** lists and groups, steps, due dates, repeats, reminders, natural-language quick add, smart views, a task calendar, undo, and backup, import, and export. All of it works offline.
 - **Calendar, Notes, Contacts:** from your connected Microsoft 365 or Google accounts.
-- **Your look:** light and dark themes in the Alondra lavender palette, custom colors, and background pictures that are processed on your PC.
+- **Your look:** light and dark themes in the Alondra1 lavender palette, custom colors, and background pictures that are processed on your PC.
 - **Simple install:** a per-user setup with no administrator prompt. Updates and uninstalls never touch your data.
 
 See [docs/FEATURES.md](docs/FEATURES.md) for the complete list.
 
 ## Install
 
-Run `artifacts/Alondra-setup.exe`, or build it yourself as shown below. It installs to `%LOCALAPPDATA%\Programs\Alondra` and adds a Start menu shortcut and an entry in Settings → Apps.
+Run `artifacts/Alondra1-setup.exe`, or build it yourself as shown below. It installs to `%LOCALAPPDATA%\Programs\Alondra1` and adds a Start menu shortcut and an entry in Settings → Apps.
 
-Your data lives in `%LOCALAPPDATA%\alondra`. Installing a newer version or uninstalling keeps it.
+Your data lives in `%LOCALAPPDATA%\alondra1`. Installing a newer version or uninstalling keeps it.
 
 On first launch, choose sample data, import a configuration, or add an account. For Microsoft 365 or Gmail sign-in, register a free public OAuth client first ([docs/OAUTH-SETUP.md](docs/OAUTH-SETUP.md)).
 
@@ -39,10 +39,10 @@ On first launch, choose sample data, import a configuration, or add an account. 
 You need the .NET 10 SDK on Windows. For the setup program you also need Inno Setup 6.
 
 ```powershell
-dotnet build Alondra.slnx                          # build
-dotnet test Alondra.slnx                           # run the tests
-dotnet run --project src/Alondra.App -- --demo     # try it with sample data
-./installer/publish.ps1                            # self-contained build + artifacts/Alondra-setup.exe
+dotnet build Alondra1.slnx                          # build
+dotnet test Alondra1.slnx                           # run the tests
+dotnet run --project src/Alondra1.App -- --demo     # try it with sample data
+./installer/publish.ps1                            # self-contained build + artifacts/Alondra1-setup.exe
 ```
 
 `--demo` uses labeled sample data in a temporary folder and never contacts a provider.
@@ -51,7 +51,7 @@ dotnet run --project src/Alondra.App -- --demo     # try it with sample data
 
 | Document | For |
 | --- | --- |
-| [Features](docs/FEATURES.md) | Everything Alondra does today, by workspace, and the known gaps. |
+| [Features](docs/FEATURES.md) | Everything Alondra1 does today, by workspace, and the known gaps. |
 | [Architecture](docs/ARCHITECTURE.md) | Projects, ports and adapters, sync, storage, security, threading. |
 | [Code guide](docs/CODE-GUIDE.md) | File-by-file reference, common changes, command-line switches, tests. |
 | [Guidelines](docs/GUIDELINES.md) | Principles and rules for code, data, security, UI, testing, and releases. |
@@ -62,10 +62,10 @@ dotnet run --project src/Alondra.App -- --demo     # try it with sample data
 
 ## Logo
 
-<img src="docs/images/alondra-logo-512.png" alt="Alondra logo" width="128">
+<img src="docs/images/alondra1-logo-512.png" alt="Alondra1 logo" width="128">
 
-The Alondra bird is in [`docs/images`](docs/images):
+The Alondra1 bird is in [`docs/images`](docs/images):
 - transparent PNGs at 64, 512, and 1024 px;
 - the README banner.
 
-The app icon is `src/Alondra.App/Assets/alondra.ico`. The banner and the setup wizard artwork are generated by `installer/branding/make-branding.ps1`.
+The app icon is `src/Alondra1.App/Assets/alondra1.ico`. The banner and the setup wizard artwork are generated by `installer/branding/make-branding.ps1`.

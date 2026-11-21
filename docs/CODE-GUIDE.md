@@ -1,33 +1,33 @@
 # Code guide
 
-<img src="images/alondra-logo-64.png" alt="" width="48" align="right">
+<img src="images/alondra1-logo-64.png" alt="" width="48" align="right">
 
 This guide is a reference to the source tree: what each file does, where to make common changes, the command-line switches, and the tests. Read [ARCHITECTURE.md](ARCHITECTURE.md) first for the overall design.
 
 ## Getting started
 
 ```powershell
-dotnet build Alondra.slnx
-dotnet test Alondra.slnx
-dotnet run --project src/Alondra.App -- --demo
+dotnet build Alondra1.slnx
+dotnet test Alondra1.slnx
+dotnet run --project src/Alondra1.App -- --demo
 ```
 
-- **SDK:** .NET 10. If it is installed only under `%LOCALAPPDATA%\dotnet` and is not on `PATH`, set `DOTNET_ROOT` to that folder before starting a built `Alondra.exe`.
-- **Demo mode:** `--demo` uses labeled sample data in a temporary folder. Your real `%LOCALAPPDATA%\alondra` is never touched.
+- **SDK:** .NET 10. If it is installed only under `%LOCALAPPDATA%\dotnet` and is not on `PATH`, set `DOTNET_ROOT` to that folder before starting a built `Alondra1.exe`.
+- **Demo mode:** `--demo` uses labeled sample data in a temporary folder. Your real `%LOCALAPPDATA%\alondra1` is never touched.
 
 ## Repository layout
 
 | Path | Contents |
 | --- | --- |
-| `Alondra.slnx` | Solution (five source projects and the tests). |
+| `Alondra1.slnx` | Solution (five source projects and the tests). |
 | `src/` | Source projects; see below. |
-| `tests/Alondra.Tests/` | xUnit tests. |
-| `installer/` | `publish.ps1` (build plus setup), `alondra.iss` (Inno Setup script), `branding/` (setup artwork and its generator). |
+| `tests/Alondra1.Tests/` | xUnit tests. |
+| `installer/` | `publish.ps1` (build plus setup), `alondra1.iss` (Inno Setup script), `branding/` (setup artwork and its generator). |
 | `design/` | `backgrounds/` (generator for the built-in background pictures), `compact-mail-reference.html` (the mail layout reference). |
 | `docs/` | Documentation, `images/` (logo and banner), `screenshots/`. |
-| `artifacts/` | Build output: `win-x64/` and `Alondra-setup.exe`. Ignored by git. |
+| `artifacts/` | Build output: `win-x64/` and `Alondra1-setup.exe`. Ignored by git. |
 
-## Alondra.Core
+## Alondra1.Core
 
 Plain .NET with no I/O. Everything here can be unit-tested directly.
 
@@ -49,15 +49,15 @@ Plain .NET with no I/O. Everything here can be unit-tested directly.
 | `Tasks/Recurrence.cs` | Next-occurrence calculation on calendar dates. |
 | `Tasks/Reminders.cs` | Wall-clock reminder times in the local zone, including the DST gap and overlap. |
 | `Tasks/NaturalDateParser.cs` | Offline parser for quick add ("Call Sam tomorrow 3pm", "every month on the 1st"). |
-| `Tasks/TodoTransfer.cs` | JSON export and import (`alondra-todo` format, validated and with ids remapped), CSV, and iCalendar (`VTODO`). |
+| `Tasks/TodoTransfer.cs` | JSON export and import (`alondra1-todo` format, validated and with ids remapped), CSV, and iCalendar (`VTODO`). |
 
-## Alondra.Mail
+## Alondra1.Mail
 
 | File | Contents |
 | --- | --- |
 | `MailKitGateway.cs` | `IMailGateway` over MailKit. Covers IMAP and POP3 probing and fetch (checkpointed by UID or UIDL), bodies converted to text, attachment streaming with progress, flag and move commands, IDLE, and SMTP send with classified failures. |
 
-## Alondra.Persistence
+## Alondra1.Persistence
 
 | File | Contents |
 | --- | --- |
@@ -68,14 +68,14 @@ Plain .NET with no I/O. Everything here can be unit-tested directly.
 | `AttachmentFiles.cs` | Mail attachment files under `files\`. |
 | `TaskFileStore.cs` | Task attachments under `task-files\<task id>\`. Checks every path and removes orphaned files at startup. |
 
-## Alondra.Providers
+## Alondra1.Providers
 
 | File | Contents |
 | --- | --- |
 | `OAuthService.cs` | MSAL (Microsoft) and Google sign-in, separate token sets for mail protocols and for Graph or Google APIs, and refresh (`ITokenRefresher`). |
 | `OrganizerGateway.cs` | `IOrganizerGateway` for Microsoft Graph and Google Calendar, Tasks, People, and Drive app data. |
 
-## Alondra.App
+## Alondra1.App
 
 | File | Contents |
 | --- | --- |
@@ -85,7 +85,7 @@ Plain .NET with no I/O. Everything here can be unit-tested directly.
 | `Dialogs.cs` | Shared dialog frame and builders, plus Welcome, Settings (Appearance, Background, Accounts, Connections, Data), Import, Account, Compose, palette editor, and `Alert`. |
 | `ThemeService.cs` | Applies Light or Dark tokens and custom colors, and makes panels translucent when a background is on. |
 | `Converters.cs` | Value converters used by the XAML. |
-| `Controls/AlondraIcon.cs` | The icon element (`Kind`, `IconSize`). |
+| `Controls/Alondra1Icon.cs` | The icon element (`Kind`, `IconSize`). |
 | `Shell/MailDockPanel.cs` | The panel that hosts the folders, list, and reader, using `LayoutArranger`. |
 | `Shell/BackgroundService.cs` | Loads, processes, imports, and deletes background pictures. |
 | `Shell/BackgroundEditor.cs` | The Background section of Settings. |
@@ -103,7 +103,7 @@ Plain .NET with no I/O. Everything here can be unit-tested directly.
 | `Themes/Light.xaml`, `Dark.xaml` | Color tokens. Both files must define the same keys. |
 | `Themes/Controls.xaml` | Size, radius, and font tokens and every control style. |
 | `Themes/Icons.xaml` | Icon path data (24 × 24). |
-| `Assets/` | `alondra.ico`, `logo-64.png`, `Backgrounds/*.jpg`. |
+| `Assets/` | `alondra1.ico`, `logo-64.png`, `Backgrounds/*.jpg`. |
 
 ## Common changes
 
@@ -122,7 +122,7 @@ Plain .NET with no I/O. Everything here can be unit-tested directly.
 ### Add an icon
 
 1. Add a `Geometry` with the icon name to `Themes/Icons.xaml`. Draw it on a 24 × 24 grid as a stroke, not a fill.
-2. Use it with `<ui:AlondraIcon Kind="Name" IconSize="16"/>` inside a button that has `AutomationProperties.Name` and a tooltip.
+2. Use it with `<ui:Alondra1Icon Kind="Name" IconSize="16"/>` inside a button that has `AutomationProperties.Name` and a tooltip.
 
 ### Change the task schema
 
@@ -154,7 +154,7 @@ Put decisions in a policy in `Sync/MailPolicies.cs` (pure and testable). Keep `M
 | Switch | Effect |
 | --- | --- |
 | `--demo` | Labeled sample data in a temporary data folder. No provider is contacted. |
-| `--home=<folder>` | Use another data folder instead of `%LOCALAPPDATA%\alondra`. |
+| `--home=<folder>` | Use another data folder instead of `%LOCALAPPDATA%\alondra1`. |
 | `--perf` | Seed 10,000 local messages and write timings to `perf.txt`. |
 | `--theme=light\|dark` | Force a theme (demo only). |
 | `--snapshot=<file.png>` | Render the window to a PNG after start-up. A `.txt` with measured heights is written next to it. |
@@ -164,11 +164,11 @@ Put decisions in a policy in `Sync/MailPolicies.cs` (pure and testable). Keep `M
 | `--dialog=<name>` | Open `compose`, `settings`, `background`, `account`, `welcome`, `list`, or `alert` and capture it. |
 | `--exit` | Close after the snapshot. |
 
-Example: `Alondra.exe --demo --open=To-do --theme=dark --snapshot=todo.png --exit`.
+Example: `Alondra1.exe --demo --open=To-do --theme=dark --snapshot=todo.png --exit`.
 
 ## Tests
 
-`dotnet test Alondra.slnx` runs 98 tests. One test, the 10 GB mailbox, is skipped unless `ALONDRA_SCALE_TEST_ROOT` names a scratch folder.
+`dotnet test Alondra1.slnx` runs 98 tests. One test, the 10 GB mailbox, is skipped unless `ALONDRA1_SCALE_TEST_ROOT` names a scratch folder.
 
 | File | Covers |
 | --- | --- |
@@ -177,4 +177,4 @@ Example: `Alondra.exe --demo --open=To-do --theme=dark --snapshot=todo.png --exi
 | `TodoTests.cs` | Task engine, recurrence, DST reminders, natural-language dates, smart views, calendar, persistence and migration, backup and restore, import and export, attachments, 10,000 tasks, and a check that task code uses no network APIs. |
 | `UiDesignTests.cs` | Two-row shell, header and toolbar heights, shared control styles, matching palettes, WCAG contrast, icon validity, background defaults and checks, themed dialogs, no network addresses in app markup. |
 
-Tests use temporary folders (`Directory.CreateTempSubdirectory("alondra-…")`) and a fixed clock where time matters. They never touch the real data folder or the network.
+Tests use temporary folders (`Directory.CreateTempSubdirectory("alondra1-…")`) and a fixed clock where time matters. They never touch the real data folder or the network.

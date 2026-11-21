@@ -1,8 +1,8 @@
 # UI design system
 
-<img src="images/alondra-logo-64.png" alt="" width="48" align="right">
+<img src="images/alondra1-logo-64.png" alt="" width="48" align="right">
 
-This describes the Alondra interface: the two-row shell, design tokens, the Alondra icon family, backgrounds, and what is still open.
+This describes the Alondra1 interface: the two-row shell, design tokens, the Alondra1 icon family, backgrounds, and what is still open.
 
 | Light | Dark |
 | --- | --- |
@@ -12,13 +12,13 @@ This describes the Alondra interface: the two-row shell, design tokens, the Alon
 
 Narrow window (560 px): ![Narrow](screenshots/narrow.png)
 
-Screenshots are produced by the app itself: `Alondra.exe --demo --snapshot=<file.png> --exit`, optionally with `--open=<module>`, `--theme=dark`, and `--width=<px>`. They render the window's visual tree, so open popups and menus are not included.
+Screenshots are produced by the app itself: `Alondra1.exe --demo --snapshot=<file.png> --exit`, optionally with `--open=<module>`, `--theme=dark`, and `--width=<px>`. They render the window's visual tree, so open popups and menus are not included.
 
 ## Shell: two rows above the content
 
 | Row | Height | Contents |
 | --- | --- | --- |
-| Application header | 56 px | Logo and “Alondra” wordmark · Mail, Calendar, To-do, Notes, Contacts, Chat (Soon) · contextual search · Settings · window buttons |
+| Application header | 56 px | Logo and “Alondra1” wordmark · Mail, Calendar, To-do, Notes, Contacts, Chat (Soon) · contextual search · Settings · window buttons |
 | Module toolbar | 48 px | Mail: account selector with connection status, folder tabs, New / Reply / Reply all / Forward / Archive / Delete / Mark read or unread, Layout, More. Calendar: month navigation. To-do: sort, filter, important, undo, More. Notes: note selector, New note. Contacts: count. Chat: “Coming later”. |
 
 The old module-navigation row, the “Mail” title, and the account/status text row are gone. Connection status (Up to date, Syncing…, Offline, Sync failed, Sample data, No accounts) is a colored dot with a label beside the account selector; the full text (account · mode · detail) is its tooltip and accessible name. Due task reminders float over the content as cards instead of occupying a row.
@@ -48,7 +48,7 @@ The module that is open always stays visible in the header. In To-do, the list s
 
 ## Tokens
 
-Defined in `src/Alondra.App/Themes/Controls.xaml` (shape) and `Light.xaml` / `Dark.xaml` (color).
+Defined in `src/Alondra1.App/Themes/Controls.xaml` (shape) and `Light.xaml` / `Dark.xaml` (color).
 
 | Radius | Value | Used for |
 | --- | --- | --- |
@@ -79,13 +79,13 @@ Spacing follows 4 / 8 / 12 / 16 / 20 / 24 (panel padding 16, field gap 8, sectio
 | AccentWarmBrush | #F1C2AA | #F4CDB9 | warm accent: icon details, calendar event marks (peach breast) |
 | Danger / Success / Star | | | errors and overdue / completion / importance (unchanged; they carry meaning, not branding) |
 
-The palette comes from the Alondra bird logo: wings #9397C4 to #D8D5EB, breast #F9DCCE, ground #FCF6F7. The logo's own lavender is too light for white button text (about 2.5:1), so brand fills use a deeper #6C6DB0 (4.7:1 with white), and accent text uses #55569E in the light theme (5.4:1 on the selected color). `UiDesignTests` checks WCAG contrast for text, muted text, accents, and button text in both themes.
+The palette comes from the Alondra1 bird logo: wings #9397C4 to #D8D5EB, breast #F9DCCE, ground #FCF6F7. The logo's own lavender is too light for white button text (about 2.5:1), so brand fills use a deeper #6C6DB0 (4.7:1 with white), and accent text uses #55569E in the light theme (5.4:1 on the selected color). `UiDesignTests` checks WCAG contrast for text, muted text, accents, and button text in both themes.
 
 Restyled controls: buttons (quiet, icon, primary, navigation, mode), text boxes, search, selectors (rounded box, chevron, rounded drop-down), context menus and submenus, tooltips, check boxes, list rows, and slim scroll bars. Custom colors from Settings → Edit light/dark colors still override any token.
 
-## Alondra icon family
+## Alondra1 icon family
 
-`Themes/Icons.xaml` holds 62 icons as SVG path data on a 24 × 24 viewBox. `Controls/AlondraIcon.cs` draws them at 16, 20, or 24 px with a 1.75 px round-capped stroke in the current text color, so hover, selected, disabled, and theme changes apply automatically. Some icons add a small yellow accent (Calendar, Notes, Sun, Image). Icons are decorative; the containing button carries the accessible name and tooltip.
+`Themes/Icons.xaml` holds 62 icons as SVG path data on a 24 × 24 viewBox. `Controls/Alondra1Icon.cs` draws them at 16, 20, or 24 px with a 1.75 px round-capped stroke in the current text color, so hover, selected, disabled, and theme changes apply automatically. Some icons add a small yellow accent (Calendar, Notes, Sun, Image). Icons are decorative; the containing button carries the accessible name and tooltip.
 
 | Group | Icons |
 | --- | --- |
@@ -95,14 +95,14 @@ Restyled controls: buttons (quiet, icon, primary, navigation, mode), text boxes,
 | Tasks | Reminder, Recurrence, Check, Priority, PriorityFilled, Sun, Clock, Alert, Chart, List, Home, Unscheduled, Group |
 | Navigation | Back, Next, ChevronDown, ChevronUp, ChevronRight |
 
-Remaining font glyphs: the minimize, maximize, and close window buttons deliberately keep the native Windows glyphs. Move and Flag exist in the family but are not in the toolbar because Alondra has no move-to-folder or flag action yet. `UiDesignTests` checks every path parses and stays inside the 24 × 24 box, and that every icon name used in the app exists.
+Remaining font glyphs: the minimize, maximize, and close window buttons deliberately keep the native Windows glyphs. Move and Flag exist in the family but are not in the toolbar because Alondra1 has no move-to-folder or flag action yet. `UiDesignTests` checks every path parses and stays inside the 24 × 24 box, and that every icon name used in the app exists.
 
 ## Backgrounds
 
 Settings → Background:
 
 - Gallery: Plain color, Soft blue, Gray geometric, Muted coast, Misty mountains, Minimal architecture, Warm neutral, Dark blue, and “My picture” once one is chosen.
-- Choose picture… (PNG, JPEG, or WebP up to 25 MB, checked by content, not file name). The picture is decoded, scaled to at most 2560 px, re-encoded as JPEG, and stored in `%LOCALAPPDATA%\alondra\backgrounds`, so moving or deleting the original does not matter. Remove my picture deletes the stored copy when settings are saved.
+- Choose picture… (PNG, JPEG, or WebP up to 25 MB, checked by content, not file name). The picture is decoded, scaled to at most 2560 px, re-encoded as JPEG, and stored in `%LOCALAPPDATA%\alondra1\backgrounds`, so moving or deleting the original does not matter. Remove my picture deletes the stored copy when settings are saved.
 - Picture opacity (0–100%), blur (0–40 px), desaturation, brightness (±50%), overlay (0–80%), position, and Cover or Contain.
 - Show background on/off and Reset background to default. Defaults: Misty mountains, 85% opacity, 2 px blur, 10% desaturation, cover, center. Settings that still hold the first, very muted defaults (soft blue, 15% / 8 px / 35%) untouched are moved to these; values someone chose are kept.
 
@@ -110,13 +110,13 @@ Changes preview live on the main window; Save settings keeps them, closing Setti
 
 The picture sits behind the whole window and shows through the main panels (about 69% opaque) and the header (a 45% scrim of the base color behind the labels). Its brightness adapts to the theme: in dark mode a light picture is darkened toward a 36% average, in light mode a dark picture is lifted toward 72%, so text over it stays readable while the picture keeps its detail. Popups, menus, inputs, and message bodies stay opaque.
 
-The built-in pictures are original artwork drawn for Alondra by `design/backgrounds/generate.ps1` (no third-party content) and bundled in the app (about 380 KB in total). Nothing is downloaded at runtime.
+The built-in pictures are original artwork drawn for Alondra1 by `design/backgrounds/generate.ps1` (no third-party content) and bundled in the app (about 380 KB in total). Nothing is downloaded at runtime.
 
 ## Acceptance checklist
 
 | Criterion | Status |
 | --- | --- |
-| Logo and “Alondra” replace the Mail icon and title | Done |
+| Logo and “Alondra1” replace the Mail icon and title | Done |
 | One header row: branding, module navigation, search, Settings | Done (checked by `UiDesignTests`) |
 | Module navigation moved into the header; old row removed | Done |
 | Second row: Mail account, folders, and actions | Done |
@@ -124,7 +124,7 @@ The built-in pictures are original artwork drawn for Alondra by `design/backgrou
 | Header ≈ 56–60 px, toolbar ≈ 48–52 px | Done: 56 and 48, measured in the running app |
 | Narrow windows: icons and overflow, no extra row | Done (checked at 560 px) |
 | Consistent radius tokens on buttons, selectors, panels, inputs, menus | Done; dialogs use the standard Windows frame (see below) |
-| Custom Alondra icons replace generic primary icons | Done; window buttons keep native glyphs |
+| Custom Alondra1 icons replace generic primary icons | Done; window buttons keep native glyphs |
 | Built-in local backgrounds | Done |
 | Custom background: choose, preview, keep, remove, reset | Done |
 | Background settings persist and work offline | Done |

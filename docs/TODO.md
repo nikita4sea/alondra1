@@ -1,6 +1,6 @@
 # Local To-do
 
-<img src="images/alondra-logo-64.png" alt="" width="48" align="right">
+<img src="images/alondra1-logo-64.png" alt="" width="48" align="right">
 
 The To-do workspace (Ctrl+3) manages personal tasks stored on this PC. It works without a network connection, an account, or any service. Tasks from a Microsoft 365 or Google account are still available under **Account tasks** in the To-do sidebar; they are separate from local tasks and are loaded only when that view is opened.
 
@@ -8,9 +8,9 @@ The To-do workspace (Ctrl+3) manages personal tasks stored on this PC. It works 
 
 | Layer | Files | Responsibility |
 | --- | --- | --- |
-| Domain | `src/Alondra.Core/Tasks/` | Entities, recurrence, smart views, search and sort, natural-language dates, reminders, import/export, and `TaskBoard` (all task rules). No UI, storage, or network code. |
-| Persistence | `src/Alondra.Persistence/SqliteTaskStore.cs`, `TaskFileStore.cs` | SQLite storage with migrations, backups, and copied attachment files. |
-| Presentation | `src/Alondra.App/Tasks/` | `TodoViewModel` (rows, preferences, commands), `TodoView` (layout, drag and drop, keyboard), dialogs, printing, reminder notifications. |
+| Domain | `src/Alondra1.Core/Tasks/` | Entities, recurrence, smart views, search and sort, natural-language dates, reminders, import/export, and `TaskBoard` (all task rules). No UI, storage, or network code. |
+| Persistence | `src/Alondra1.Persistence/SqliteTaskStore.cs`, `TaskFileStore.cs` | SQLite storage with migrations, backups, and copied attachment files. |
+| Presentation | `src/Alondra1.App/Tasks/` | `TodoViewModel` (rows, preferences, commands), `TodoView` (layout, drag and drop, keyboard), dialogs, printing, reminder notifications. |
 
 `TaskBoard` is the single entry point for changes. Each change builds a `TodoChangeSet` and its inverse, writes the change set to the store in **one transaction**, and only then updates memory. If the write fails, memory is untouched and the user sees "nothing was changed". The inverse is kept for undo (50 steps). Awaits resume on the caller's context, so in the app every change and every `Changed` event happens on the UI thread.
 
@@ -32,7 +32,7 @@ Smart views are filters over the one stored set of tasks (`SmartViews.Includes`)
 
 ### Storage
 
-Local tasks live in `%LOCALAPPDATA%\alondra\todo.db`, next to `personal.db`, using the same library (Microsoft.Data.Sqlite) and the same `PRAGMA user_version` versioning. They use a separate file because `personal.db` belongs to mail accounts: removing an account or leaving Personal mode deletes that account's rows, and to-do data must not depend on that. A separate file can also be backed up and restored without touching mail.
+Local tasks live in `%LOCALAPPDATA%\alondra1\todo.db`, next to `personal.db`, using the same library (Microsoft.Data.Sqlite) and the same `PRAGMA user_version` versioning. They use a separate file because `personal.db` belongs to mail accounts: removing an account or leaving Personal mode deletes that account's rows, and to-do data must not depend on that. A separate file can also be backed up and restored without touching mail.
 
 Rows store each entity as JSON, plus indexed key columns (`list_id`, `due_date`, `completed`). New fields can be added to the JSON without a migration.
 
@@ -41,7 +41,7 @@ Rows store each entity as JSON, plus indexed key columns (`list_id`, `due_date`,
 - **A newer file** (higher `user_version`) is refused and left unchanged. Only the To-do workspace is disabled; mail keeps working.
 - A damaged JSON row is skipped instead of blocking every other task from loading.
 
-Attached files are **copied** into `%LOCALAPPDATA%\alondra\task-files\<task id>\<random name>`. Stored paths are relative and checked to stay inside that folder before a file is opened. Files that no task refers to are removed once at startup, not when a task is deleted, so undo can restore an attachment.
+Attached files are **copied** into `%LOCALAPPDATA%\alondra1\task-files\<task id>\<random name>`. Stored paths are relative and checked to stay inside that folder before a file is opened. Files that no task refers to are removed once at startup, not when a task is deleted, so undo can restore an attachment.
 
 ## Behavior decisions
 
@@ -62,9 +62,9 @@ Reminders are stored as local wall-clock times and converted with the PC's curre
 - A time in the spring-forward gap (02:30 on the change day) fires at the first valid minute (03:00).
 - A time that happens twice in the fall-back hour fires once, at its first occurrence.
 
-`ReminderNotifier` checks every 15 seconds while Alondra runs. A due reminder is marked delivered **before** it is shown, so it is never shown twice. It appears in a reminder bar under the workspace tabs (visible in every workspace) with **Open**, **Snooze**, and **Dismiss**, and, unless turned off in the To-do **⋯** menu, as a Windows notification from the notification-area icon.
+`ReminderNotifier` checks every 15 seconds while Alondra1 runs. A due reminder is marked delivered **before** it is shown, so it is never shown twice. It appears in a reminder bar under the workspace tabs (visible in every workspace) with **Open**, **Snooze**, and **Dismiss**, and, unless turned off in the To-do **⋯** menu, as a Windows notification from the notification-area icon.
 
-**Limitations:** Alondra has no background service or scheduled task, so reminders are not delivered while it is closed. A reminder that came due while it was closed is shown the next time Alondra starts. Snooze and Dismiss are in the reminder bar; the Windows notification has no buttons (clicking it opens the task).
+**Limitations:** Alondra1 has no background service or scheduled task, so reminders are not delivered while it is closed. A reminder that came due while it was closed is shown the next time Alondra1 starts. Snooze and Dismiss are in the reminder bar; the Windows notification has no buttons (clicking it opens the task).
 
 ## Import, export, backup
 
@@ -72,12 +72,12 @@ All of these are in the To-do **⋯** menu and read or write only local files.
 
 | Action | Format |
 | --- | --- |
-| Export JSON | `{"format":"alondra-todo","version":1,...}` with groups, lists, tasks, and history. Attachment metadata is included; the files themselves are not. |
+| Export JSON | `{"format":"alondra1-todo","version":1,...}` with groups, lists, tasks, and history. Attachment metadata is included; the files themselves are not. |
 | Import JSON | The same format. Validated (format name, version, duplicate ids, missing ids, size limits) before anything is written. A confirmation shows what will be added. |
 | Export CSV | One row per task, UTF-8 with BOM for Excel. Cells starting with `= + - @` are prefixed with `'` so spreadsheets do not run them as formulas. |
 | Export iCalendar | `VTODO` items with `DUE`, `DTSTART`, `PRIORITY`, `STATUS`, `RRULE`, and `VALARM` (RFC 5545, folded lines). |
 | Back up now | A consistent SQLite copy (`.atodo`) made with SQLite's online backup. |
-| Automatic backup | Once a day at startup, when there are tasks; the last 7 are kept in `%LOCALAPPDATA%\alondra\backups`. |
+| Automatic backup | Once a day at startup, when there are tasks; the last 7 are kept in `%LOCALAPPDATA%\alondra1\backups`. |
 | Restore | Opens a copy of the backup, checks integrity and tables, migrates the copy if it is older, then replaces current data. |
 
 ## Keyboard
@@ -117,7 +117,7 @@ Statuses: **Already supported**, **Implemented**, **Partially implemented**, **N
 | Subtasks with own completion | Implemented | "Steps"; progress bar; a step can be turned into a task. |
 | Importance (star) | Implemented | |
 | Due dates | Implemented | Typed dates accept culture formats, ISO, and words (tomorrow, fri, next week). |
-| Reminders | Implemented | Delivered while Alondra runs; see Limitations. |
+| Reminders | Implemented | Delivered while Alondra1 runs; see Limitations. |
 | Recurrence: daily, weekly, monthly, yearly, custom | Implemented | Custom: every N days/weeks/months/years, chosen weekdays, end date. |
 | Attach local files | Implemented | Copied into the data folder; drag files onto the details pane. |
 | Move between lists | Implemented | Details pane, context menu, bulk bar, or drag onto a sidebar list. |
@@ -163,7 +163,7 @@ Statuses: **Already supported**, **Implemented**, **Partially implemented**, **N
 | Recurring reminders | Implemented | Reminders move with each occurrence, keeping their wall-clock time. |
 | Time zone and DST | Implemented | Covered by tests in Eastern Time across both 2026–2027 changes. |
 | No duplicate reminders | Implemented | Marked delivered before display. |
-| Reminders while Alondra is closed | Not implemented | No background service; see Limitations. |
+| Reminders while Alondra1 is closed | Not implemented | No background service; see Limitations. |
 
 ### Local data
 
@@ -187,7 +187,7 @@ Cloud sync, remote databases, accounts, sharing, collaboration, push services, t
 
 ## Limitations
 
-- Reminders are delivered only while Alondra is running (see above).
+- Reminders are delivered only while Alondra1 is running (see above).
 - Natural-language parsing understands English words; numeric dates follow the Windows date format (day-first or month-first).
 - Steps are reordered with buttons, not by dragging.
 - The task calendar is in To-do; tasks do not appear in the Calendar workspace next to account events.

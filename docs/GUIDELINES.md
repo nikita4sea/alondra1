@@ -1,22 +1,22 @@
 # Development guidelines
 
-<img src="images/alondra-logo-64.png" alt="" width="48" align="right">
+<img src="images/alondra1-logo-64.png" alt="" width="48" align="right">
 
-These are the rules for changing Alondra. They protect the users' data and privacy and keep the app consistent. If a change needs to break one of them, say so in the pull request and explain why.
+These are the rules for changing Alondra1. They protect the users' data and privacy and keep the app consistent. If a change needs to break one of them, say so in the pull request and explain why.
 
 ## Product principles
 
 1. **Local-first.** The app must open, show local mail and tasks, and accept edits with no network connection. Online features fail gracefully: they show a status such as "Offline" and never block the window.
-2. **No Alondra service.** Do not add servers, telemetry, analytics, crash upload, update checks, ads, or remote configuration. Network calls go only to the accounts the user added, using the endpoints shown in their settings.
-3. **The user's data stays theirs.** Everything Alondra writes is in `%LOCALAPPDATA%\alondra`, in documented formats (SQLite, JSON, CSV, iCalendar). Exports never contain secrets.
+2. **No Alondra1 service.** Do not add servers, telemetry, analytics, crash upload, update checks, ads, or remote configuration. Network calls go only to the accounts the user added, using the endpoints shown in their settings.
+3. **The user's data stays theirs.** Everything Alondra1 writes is in `%LOCALAPPDATA%\alondra1`, in documented formats (SQLite, JSON, CSV, iCalendar). Exports never contain secrets.
 4. **Never lose data silently.** Before replacing data, validate the input, make a safety copy where it matters, and ask for confirmation. Prefer undo over a confirmation dialog for everyday actions.
 5. **Be honest in the UI.** Say what happened in plain words, such as "Nothing was changed" or "Sent, but the server did not confirm". Sample data is always labeled.
 6. **Respect the user's machine.** No administrator rights, no background services, no startup entries, no changes outside the user's own folders.
 
 ## Naming and branding
 
-- The product name is **Alondra**: capital A in text and UI, `alondra` in file names, folders, and identifiers (`%LOCALAPPDATA%\alondra`, `alondra-todo`, `@alondra.local`). Namespaces and projects are `Alondra.*`.
-- Use the logo files in `docs/images` and `src/Alondra.App/Assets`. Do not redraw, recolor, or stretch the bird.
+- The product name is **Alondra1**: capital A in text and UI, `alondra1` in file names, folders, and identifiers (`%LOCALAPPDATA%\alondra1`, `alondra1-todo`, `@alondra1.local`). Namespaces and projects are `Alondra1.*`.
+- Use the logo files in `docs/images` and `src/Alondra1.App/Assets`. Do not redraw, recolor, or stretch the bird.
 - Brand colors come from the logo: lavender `#6C6DB0` for actions, wing lavender for accents, peach `#F1C2AA` for warm details. Use them through theme tokens, never as literal colors (see below).
 
 ## Code style
@@ -24,12 +24,12 @@ These are the rules for changing Alondra. They protect the users' data and priva
 - C# with nullable reference types enabled, file-scoped namespaces, and `sealed` classes by default. Expression-bodied members are fine where the body is short.
 - Names describe the user-facing concept: `TaskBoard`, `ReminderNotifier`, `ConnectionPolicy`. Avoid abbreviations except well-known ones (IMAP, SMTP, UID, DPAPI).
 - Comments say **why**, or state an invariant, not what the next line does. Public types that hold a rule get a `<summary>`.
-- Keep files focused. A policy or algorithm that can be tested on its own goes into `Alondra.Core`.
+- Keep files focused. A policy or algorithm that can be tested on its own goes into `Alondra1.Core`.
 - Do not catch `Exception` broadly. Catch the specific types (`IOException`, `SqliteException`, `UnauthorizedAccessException`) and let real bugs reach the crash handler.
 
 ## Architecture rules
 
-- `Alondra.Core` has no file, database, network, or UI code. It defines ports, and the adapters implement them.
+- `Alondra1.Core` has no file, database, network, or UI code. It defines ports, and the adapters implement them.
 - Adapters (`Mail`, `Persistence`, `Providers`) depend only on `Core`, never on each other or on `App`.
 - Wire new services in `AppServices.CreateAsync`, the only composition root.
 - Every change to local tasks goes through `TaskBoard` as a change set with an inverse. Do not write to `todo.db` from anywhere else.
@@ -62,7 +62,7 @@ These are the rules for changing Alondra. They protect the users' data and priva
 
 - **Use tokens, not literals.** Colors: `{DynamicResource TextBrush}`, `BrandBrush`, and the rest. Sizes and radii: `ControlMd`, `RadiusMd`, and so on. The list is in [UI-DESIGN.md](UI-DESIGN.md). New colors go into **both** `Light.xaml` and `Dark.xaml`.
 - **Use the shared styles** in `Themes/Controls.xaml` (`PrimaryButton`, `IconButton`, `QuietButton`, `Card`, `Pane`, `FieldLabel`, and others) instead of local styling.
-- **Icons** come from `Themes/Icons.xaml` through `AlondraIcon`: 24 × 24 grid, 1.75 px stroke.
+- **Icons** come from `Themes/Icons.xaml` through `Alondra1Icon`: 24 × 24 grid, 1.75 px stroke.
 - **Contrast:** at least WCAG AA (4.5:1 for text, 3:1 for large text and icons) in both themes. `UiDesignTests` checks the main tokens.
 - **Accessibility:** every icon-only button has `AutomationProperties.Name` and a tooltip. Everything works with the keyboard, focus is visible, and nothing relies on color alone, so overdue items also show text.
 - **Layout:** the header is 56 px and the toolbar 48 px. Never add a third row above the content. Narrow windows hide labels and move items into More menus (see the breakpoints in UI-DESIGN.md).
@@ -72,9 +72,9 @@ These are the rules for changing Alondra. They protect the users' data and priva
 ## Testing
 
 - Every rule or bug fix gets a test. Pure logic goes into the Core tests, and storage tests use temporary folders.
-- Tests never touch `%LOCALAPPDATA%\alondra` or the network. Use `Directory.CreateTempSubdirectory("alondra-…")` and a fixed `IClock`.
+- Tests never touch `%LOCALAPPDATA%\alondra1` or the network. Use `Directory.CreateTempSubdirectory("alondra1-…")` and a fixed `IClock`.
 - For a UI change, also check it visually: render light and dark snapshots (`--demo --snapshot=… --theme=dark --exit`), including a narrow width.
-- `dotnet test Alondra.slnx` must pass before a change is merged.
+- `dotnet test Alondra1.slnx` must pass before a change is merged.
 
 ## Documentation
 
@@ -88,9 +88,9 @@ These are the rules for changing Alondra. They protect the users' data and priva
 
 ## Releases
 
-1. Bump the version in `src/Alondra.App/Alondra.App.csproj`, `src/Alondra.App/app.manifest`, and `installer/alondra.iss` (`MyAppVersion` and the `VersionInfo*` lines).
-2. Run `dotnet test Alondra.slnx`.
-3. Run `./installer/publish.ps1`. It cleans `artifacts\win-x64`, publishes a self-contained build, and compiles `artifacts\Alondra-setup.exe`.
+1. Bump the version in `src/Alondra1.App/Alondra1.App.csproj`, `src/Alondra1.App/app.manifest`, and `installer/alondra1.iss` (`MyAppVersion` and the `VersionInfo*` lines).
+2. Run `dotnet test Alondra1.slnx`.
+3. Run `./installer/publish.ps1`. It cleans `artifacts\win-x64`, publishes a self-contained build, and compiles `artifacts\Alondra1-setup.exe`.
 4. Install over the previous version and check that settings, mail, and tasks are still there, then uninstall and check that the data folder remains.
 5. Add a section to DELIVERY-NOTES.md.
 
