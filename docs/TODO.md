@@ -8,9 +8,9 @@ The To-do workspace (Ctrl+3) manages personal tasks stored on this PC. It works 
 
 | Layer | Files | Responsibility |
 | --- | --- | --- |
-| Domain | `src/Alondra1.Core/Tasks/` | Entities, recurrence, smart views, search and sort, natural-language dates, reminders, import/export, and `TaskBoard` (all task rules). No UI, storage, or network code. |
-| Persistence | `src/Alondra1.Persistence/SqliteTaskStore.cs`, `TaskFileStore.cs` | SQLite storage with migrations, backups, and copied attachment files. |
-| Presentation | `src/Alondra1.App/Tasks/` | `TodoViewModel` (rows, preferences, commands), `TodoView` (layout, drag and drop, keyboard), dialogs, printing, reminder notifications. |
+| Domain | `apps/windows/src/Alondra1.Core/Tasks/` | Entities, recurrence, smart views, search and sort, natural-language dates, reminders, import/export, and `TaskBoard` (all task rules). No UI, storage, or network code. |
+| Persistence | `apps/windows/src/Alondra1.Persistence/SqliteTaskStore.cs`, `TaskFileStore.cs` | SQLite storage with migrations, backups, and copied attachment files. |
+| Presentation | `apps/windows/src/Alondra1.App/Tasks/` | `TodoViewModel` (rows, preferences, commands), `TodoView` (layout, drag and drop, keyboard), dialogs, printing, reminder notifications. |
 
 `TaskBoard` is the single entry point for changes. Each change builds a `TodoChangeSet` and its inverse, writes the change set to the store in **one transaction**, and only then updates memory. If the write fails, memory is untouched and the user sees "nothing was changed". The inverse is kept for undo (50 steps). Awaits resume on the caller's context, so in the app every change and every `Changed` event happens on the UI thread.
 

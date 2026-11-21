@@ -7,6 +7,7 @@ This guide is a reference to the source tree: what each file does, where to make
 ## Getting started
 
 ```powershell
+cd apps/windows
 dotnet build Alondra1.slnx
 dotnet test Alondra1.slnx
 dotnet run --project src/Alondra1.App -- --demo
@@ -19,13 +20,13 @@ dotnet run --project src/Alondra1.App -- --demo
 
 | Path | Contents |
 | --- | --- |
-| `Alondra1.slnx` | Solution (five source projects and the tests). |
-| `src/` | Source projects; see below. |
-| `tests/Alondra1.Tests/` | xUnit tests. |
-| `installer/` | `publish.ps1` (build plus setup), `alondra1.iss` (Inno Setup script), `branding/` (setup artwork and its generator). |
-| `design/` | `backgrounds/` (generator for the built-in background pictures), `compact-mail-reference.html` (the mail layout reference). |
+| `apps/windows/Alondra1.slnx` | Windows solution (five source projects and the tests). Run `dotnet` commands from `apps/windows`. |
+| `apps/windows/src/` | Source projects; see below. |
+| `apps/windows/tests/Alondra1.Tests/` | xUnit tests. |
+| `apps/windows/installer/` | `publish.ps1` (build plus setup), `alondra1.iss` (Inno Setup script), `branding/` (setup artwork and its generator). |
+| `apps/windows/design/` | `backgrounds/` (generator for the built-in background pictures), `compact-mail-reference.html` (the mail layout reference). |
 | `docs/` | Documentation, `images/` (logo and banner), `screenshots/`. |
-| `artifacts/` | Build output: `win-x64/` and `Alondra1-setup.exe`. Ignored by git. |
+| `apps/windows/artifacts/` | Build output: `win-x64/` and `Alondra1-setup.exe`. Ignored by git. |
 
 ## Alondra1.Core
 
@@ -147,7 +148,7 @@ Put decisions in a policy in `Sync/MailPolicies.cs` (pure and testable). Keep `M
 
 ### Rebuild generated artwork
 
-- Background pictures: `design/backgrounds/generate.ps1`.
+- Background pictures: `apps/windows/design/backgrounds/generate.ps1`.
 - Setup wizard images and the README banner: `powershell -ExecutionPolicy Bypass -File installer/branding/make-branding.ps1`.
 
 ## Command-line switches
@@ -169,7 +170,7 @@ Example: `Alondra1.exe --demo --open=To-do --theme=dark --snapshot=todo.png --ex
 
 ## Tests
 
-`dotnet test Alondra1.slnx` runs 98 tests. One test, the 10 GB mailbox, is skipped unless `ALONDRA1_SCALE_TEST_ROOT` names a scratch folder.
+`dotnet test Alondra1.slnx` (from `apps/windows`) runs 104 tests. One test, the 10 GB mailbox, is skipped unless `ALONDRA1_SCALE_TEST_ROOT` names a scratch folder.
 
 | File | Covers |
 | --- | --- |

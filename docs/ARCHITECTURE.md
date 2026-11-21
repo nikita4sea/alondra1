@@ -181,6 +181,6 @@ The installer puts the program in `%LOCALAPPDATA%\Programs\Alondra1`. It never t
 
 ## Build and packaging
 
-- `dotnet build Alondra1.slnx` and `dotnet test Alondra1.slnx`.
-- `installer/publish.ps1` publishes a self-contained, single-file win-x64 build to `artifacts\win-x64`, then compiles `installer/alondra1.iss` with Inno Setup 6 into `artifacts\Alondra1-setup.exe`.
-- The setup is per-user and needs no administrator rights. Its branded wizard artwork comes from `installer/branding/make-branding.ps1`.
+- From `apps/windows`: `dotnet build Alondra1.slnx` and `dotnet test Alondra1.slnx`.
+- `apps/windows/installer/publish.ps1` publishes a self-contained, single-file win-x64 build to `apps\windows\artifacts\win-x64`, then compiles `apps/windows/installer/alondra1.iss` with Inno Setup 6 into `apps\windows\artifacts\Alondra1-setup.exe`.
+- The setup is per-user and needs no administrator rights. Its branded wizard artwork comes from `apps/windows/installer/branding/make-branding.ps1`.

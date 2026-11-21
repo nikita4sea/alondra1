@@ -147,7 +147,9 @@ public static class Alondra1Branding
 "@
 $here = $PSScriptRoot
 $bird = Join-Path $here "bird-1024.png"
-$docsImages = Join-Path (Split-Path -Parent (Split-Path -Parent $here)) "docs\images"
+# The README banner belongs to the repository's docs folder: apps\windows\installer\branding -> repository root.
+$repoRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $here)))
+$docsImages = Join-Path $repoRoot "docs\images"
 [Alondra1Branding]::Banner($bird, (Join-Path $docsImages "alondra1-banner.png"))
 $scales = 100, 125, 150, 175, 200, 225, 250
 foreach ($p in $scales) {

@@ -16,7 +16,7 @@ These are the rules for changing Alondra1. They protect the users' data and priv
 ## Naming and branding
 
 - The product name is **Alondra1**: capital A in text and UI, `alondra1` in file names, folders, and identifiers (`%LOCALAPPDATA%\alondra1`, `alondra1-todo`, `@alondra1.local`). Namespaces and projects are `Alondra1.*`.
-- Use the logo files in `docs/images` and `src/Alondra1.App/Assets`. Do not redraw, recolor, or stretch the bird.
+- Use the logo files in `docs/images` and `apps/windows/src/Alondra1.App/Assets`. Do not redraw, recolor, or stretch the bird.
 - Brand colors come from the logo: lavender `#6C6DB0` for actions, wing lavender for accents, peach `#F1C2AA` for warm details. Use them through theme tokens, never as literal colors (see below).
 
 ## Code style
@@ -88,7 +88,7 @@ These are the rules for changing Alondra1. They protect the users' data and priv
 
 ## Releases
 
-1. Bump the version in `src/Alondra1.App/Alondra1.App.csproj`, `src/Alondra1.App/app.manifest`, and `installer/alondra1.iss` (`MyAppVersion` and the `VersionInfo*` lines).
+1. Bump the version in `apps/windows/src/Alondra1.App/Alondra1.App.csproj`, `apps/windows/src/Alondra1.App/app.manifest`, and `apps/windows/installer/alondra1.iss` (`MyAppVersion` and the `VersionInfo*` lines).
 2. Run `dotnet test Alondra1.slnx`.
 3. Run `./installer/publish.ps1`. It cleans `artifacts\win-x64`, publishes a self-contained build, and compiles `artifacts\Alondra1-setup.exe`.
 4. Install over the previous version and check that settings, mail, and tasks are still there, then uninstall and check that the data folder remains.

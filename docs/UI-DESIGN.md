@@ -78,7 +78,7 @@ The module that is open always stays visible in the header. In To-do, the list s
 
 ## Tokens
 
-Defined in `src/Alondra1.App/Themes/Controls.xaml` (shape) and `Light.xaml` / `Dark.xaml` (color).
+Defined in `apps/windows/src/Alondra1.App/Themes/Controls.xaml` (shape) and `Light.xaml` / `Dark.xaml` (color).
 
 | Radius | Value | Used for |
 | --- | --- | --- |
@@ -140,7 +140,7 @@ Changes preview live on the main window; Save settings keeps them, closing Setti
 
 The picture sits behind the whole window and shows through the main panels (about 69% opaque) and the header (a 45% scrim of the base color behind the labels). Its brightness adapts to the theme: in dark mode a light picture is darkened toward a 36% average, in light mode a dark picture is lifted toward 72%, so text over it stays readable while the picture keeps its detail. Popups, menus, inputs, and message bodies stay opaque.
 
-The built-in pictures are original artwork drawn for Alondra1 by `design/backgrounds/generate.ps1` (no third-party content) and bundled in the app (about 380 KB in total). Nothing is downloaded at runtime.
+The built-in pictures are original artwork drawn for Alondra1 by `apps/windows/design/backgrounds/generate.ps1` (no third-party content) and bundled in the app (about 380 KB in total). Nothing is downloaded at runtime.
 
 ## Acceptance checklist
 
