@@ -231,6 +231,27 @@ public sealed class SyncCoordinator
         _cache.ClearAccount(account.Id);
     }
 
+    /// <summary>
+    /// Forgets an account on this PC: its local mail copy, outbox, organizer cache, session cache, and stored secrets.
+    /// Waits for any sync of the account that is already running, so that sync cannot write data back afterwards.
+    /// Nothing on the mail server is changed.
+    /// </summary>
+    public async Task RemoveAccountAsync(string accountId, CancellationToken cancellationToken)
+    {
+        var gate = Gate(accountId);
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _store.DeleteAccountDataAsync(accountId, cancellationToken).ConfigureAwait(false);
+            _cache.ClearAccount(accountId);
+            await _secrets.DeleteAsync(accountId, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     private async Task<SyncReport> SyncOnlineAsync(AccountConfig account, SecretBundle secrets, CancellationToken cancellationToken)
     {
         var folders = await _mail.ListFoldersAsync(account, secrets, cancellationToken).ConfigureAwait(false);

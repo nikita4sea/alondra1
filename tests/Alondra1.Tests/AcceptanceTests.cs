@@ -232,6 +232,35 @@ public class AcceptanceTests
     }
 
     [Fact]
+    public async Task Removing_an_account_deletes_only_its_local_data_and_secrets()
+    {
+        var root = Temp();
+        var store = new SqlitePersonalStore(Path.Combine(root, "personal.db"));
+        await store.InitializeAsync(CancellationToken.None);
+        var batch = new PersonalBatch();
+        batch.Upserts.Add(Message("work", "Inbox", 1, "alpha lighthouse"));
+        batch.Upserts.Add(Message("home", "Inbox", 1, "beta lighthouse"));
+        await store.CommitAsync(batch, CancellationToken.None);
+        var cache = new SessionCache();
+        cache.SetMessages("work", "Inbox", [Message("work", "Inbox", 2, "cached")]);
+        cache.SetMessages("home", "Inbox", [Message("home", "Inbox", 2, "cached")]);
+        var secrets = new DpapiSecretStore(Path.Combine(root, "secrets"));
+        await secrets.SaveAsync("work", new SecretBundle { Password = "one" }, CancellationToken.None);
+        await secrets.SaveAsync("home", new SecretBundle { Password = "two" }, CancellationToken.None);
+        var sync = new SyncCoordinator(new FakeGateway(), store, cache, secrets, new PassthroughTokens(), new SystemClock(), new RecordingConflicts());
+
+        await sync.RemoveAccountAsync("work", CancellationToken.None);
+
+        Assert.Equal(0, await store.CountMessagesAsync("work", CancellationToken.None));
+        Assert.Equal(1, await store.CountMessagesAsync("home", CancellationToken.None));
+        Assert.Empty(cache.List("work", "Inbox"));
+        Assert.NotEmpty(cache.List("home", "Inbox"));
+        Assert.Null((await secrets.LoadAsync("work", CancellationToken.None)).Password);
+        Assert.Equal("two", (await secrets.LoadAsync("home", CancellationToken.None)).Password);
+        await store.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Outbox_survives_restart_and_uncertain_send_is_not_retried_automatically()
     {
         var root = Temp();

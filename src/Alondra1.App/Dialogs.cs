@@ -110,6 +110,25 @@ public static class Dialogs
                     Alert(window, ex.Message, "Alondra1");
                 }
             }));
+            buttons.Children.Add(Button("Delete", async () =>
+            {
+                try
+                {
+                    var pending = await model.PendingSendCountAsync(account);
+                    var message = $"Delete {account.DisplayName} ({account.Address}) from Alondra1?\n\n"
+                        + "This removes the account's settings, saved password and sign-in, and everything Alondra1 keeps for it on this PC: the local mail copy, attachment files, and outbox."
+                        + (pending > 0 ? $"\n\n{pending} unsent message{(pending == 1 ? "" : "s")} in the outbox will be discarded." : "")
+                        + "\n\nMail on the server is not changed.";
+                    if (Alert(window, message, "Delete account", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+                        return;
+                    await model.DeleteAccountAsync(account);
+                    window.Close();
+                }
+                catch (Exception ex)
+                {
+                    Alert(window, ex.Message, "Alondra1");
+                }
+            }));
             line.Children.Add(buttons);
             var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             text.Children.Add(new TextBlock { Text = account.DisplayName, FontWeight = FontWeights.SemiBold, FontSize = 14 });

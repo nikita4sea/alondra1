@@ -376,8 +376,11 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         UpdateStatus("Syncing…", ConnectionState.Syncing);
-        foreach (var account in _services.Config.Accounts)
+        foreach (var account in _services.Config.Accounts.ToList())
         {
+            // The account may have been deleted while an earlier account was syncing.
+            if (!_services.Config.Accounts.Contains(account))
+                continue;
             var report = await _services.Sync.SyncAsync(account, CancellationToken.None).ConfigureAwait(true);
             UpdateStatus(report.Detail, report.Ok ? ConnectionState.Ready : report.Offline ? ConnectionState.Offline : ConnectionState.Error);
             if (report.DegradedDedup)
@@ -461,6 +464,25 @@ public sealed partial class MainViewModel : ObservableObject
                 File.Delete(full);
             await _services.Store.ForgetAttachmentFileAsync(item.Id, CancellationToken.None).ConfigureAwait(true);
         }
+    }
+
+    public Task<int> PendingSendCountAsync(AccountConfig account) =>
+        _services.Sync.PendingCountAsync(account, CancellationToken.None);
+
+    /// <summary>
+    /// Deletes an account from Alondra1: its settings, saved password and sign-in, local mail copy, outbox, and
+    /// attachment files. Mail and organizer data on the server are not touched.
+    /// </summary>
+    public async Task DeleteAccountAsync(AccountConfig account)
+    {
+        // Remove the account from the configuration first so no new sync starts for it.
+        _services.Config.Accounts.RemoveAll(item => string.Equals(item.Id, account.Id, StringComparison.OrdinalIgnoreCase));
+        SaveConfig();
+        await _services.Sync.RemoveAccountAsync(account.Id, CancellationToken.None).ConfigureAwait(true);
+        _services.Files.DeleteAccount(account.Id);
+        if (SelectedMessage?.AccountId == account.Id)
+            SelectMessage(null);
+        await InitializeAsync().ConfigureAwait(true);
     }
 
     public async Task ChangeModeAsync(AccountConfig account, AccountMode target, bool discardPending)

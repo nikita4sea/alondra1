@@ -116,7 +116,7 @@ Shown as **Soon**. There is no chat feature yet.
 - **Settings pages:**
   - Appearance (theme, colors);
   - Background (picture and adjustments);
-  - Accounts (add, edit, switch mode);
+  - Accounts (add, edit, switch mode, delete). Deleting an account removes its settings, saved password and sign-in, local mail copy, attachment files, and outbox from this PC after a confirmation. Mail on the server is not changed;
   - Connections (OAuth client ids, and which organizer features to enable: Calendar, To-do, Contacts, Notes);
   - Data (import or export the configuration, storage use, remove unpinned attachment files).
 - **Configuration import** shows a preview and lets you **Merge** or **Replace after review**. Exports contain public client ids but never passwords or tokens.
