@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: Alondra1 cloud API
-  version: 1.0.0-milestone-c
+  version: 1.0.0-milestone-d
   description: |
     Optional cloud for Alondra1 (docs/BACKEND_SPEC.md, docs/decisions/0001-opt-in-cloud.md). This file is the source
     of truth for the /v1 API. Implemented: health, email one-time-code authentication (Milestone B), spaces with roles
-    and invitations, devices, and account deletion (Milestone C). The endpoints in `x-alondra1-planned` are specified in
+    and invitations, devices, and account deletion (Milestone C), tasks, lists, groups, completion history, settings, and
+    export (Milestone D). The endpoints in `x-alondra1-planned` are specified in
     the backend spec §9 and will be added here as they are implemented.
 
     Spaces: a caller who is not an active member of a space gets `404 NOT_FOUND` for it, exactly as for an id that does
@@ -25,6 +26,8 @@ tags:
   - name: account
   - name: spaces
   - name: devices
+  - name: tasks
+  - name: settings
 paths:
   /v1/health/live:
     get:
@@ -461,7 +464,310 @@ paths:
         "204": { description: Revoked; all its sessions end. }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /v1/list-groups:
+    parameters: [{ $ref: "#/components/parameters/TenantID" }]
+    get:
+      tags: [tasks]
+      operationId: listGroups
+      summary: The caller's list groups in this space
+      parameters: [{ $ref: "#/components/parameters/After" }, { $ref: "#/components/parameters/Limit" }]
+      responses:
+        "200":
+          description: Live groups ordered by id; `next_after` when more may follow.
+          content: { application/json: { schema: { type: object, required: [groups], properties: { groups: { type: array, items: { $ref: "#/components/schemas/GroupRecord" } }, next_after: { type: string } } } } }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [tasks]
+      operationId: createGroup
+      summary: Create a group with the client's id
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [group], properties: { group: { $ref: "schemas/todo-v1.schema.json#/$defs/ListGroup" } } } } } }
+      responses:
+        "201": { $ref: "#/components/responses/GroupRecord" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/list-groups/{id}:
+    parameters: [{ $ref: "#/components/parameters/TenantID" }, { $ref: "#/components/parameters/ResourceID" }]
+    get:
+      tags: [tasks]
+      operationId: getGroup
+      summary: One group
+      responses:
+        "200": { $ref: "#/components/responses/GroupRecord" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [tasks]
+      operationId: patchGroup
+      summary: Merge-patch a group
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }]
+      requestBody: { $ref: "#/components/requestBodies/Patch" }
+      responses:
+        "200": { $ref: "#/components/responses/GroupRecord" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [tasks]
+      operationId: deleteGroup
+      summary: Delete a group; its lists become ungrouped
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }]
+      responses:
+        "204": { description: Deleted (tombstone kept for sync). }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/task-lists:
+    parameters: [{ $ref: "#/components/parameters/TenantID" }]
+    get:
+      tags: [tasks]
+      operationId: listLists
+      summary: The caller's task lists in this space
+      parameters: [{ $ref: "#/components/parameters/After" }, { $ref: "#/components/parameters/Limit" }]
+      responses:
+        "200":
+          description: Live lists ordered by id.
+          content: { application/json: { schema: { type: object, required: [lists], properties: { lists: { type: array, items: { $ref: "#/components/schemas/ListRecord" } }, next_after: { type: string } } } } }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [tasks]
+      operationId: createList
+      summary: Create a list with the client's id (at most one default list)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [list], properties: { list: { $ref: "schemas/todo-v1.schema.json#/$defs/TaskList" } } } } } }
+      responses:
+        "201": { $ref: "#/components/responses/ListRecord" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/task-lists/{id}:
+    parameters: [{ $ref: "#/components/parameters/TenantID" }, { $ref: "#/components/parameters/ResourceID" }]
+    get:
+      tags: [tasks]
+      operationId: getList
+      summary: One list
+      responses:
+        "200": { $ref: "#/components/responses/ListRecord" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [tasks]
+      operationId: patchList
+      summary: Merge-patch a list (rename, reorder, regroup, recolor); isDefault cannot change
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }]
+      requestBody: { $ref: "#/components/requestBodies/Patch" }
+      responses:
+        "200": { $ref: "#/components/responses/ListRecord" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [tasks]
+      operationId: deleteList
+      summary: Delete a list and its tasks (not the default list)
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }]
+      responses:
+        "204": { description: Deleted with its tasks (tombstones kept; completion history kept). }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/tasks:
+    parameters: [{ $ref: "#/components/parameters/TenantID" }]
+    get:
+      tags: [tasks]
+      operationId: listTasks
+      summary: The caller's tasks in this space (never other members' tasks)
+      parameters:
+        - { $ref: "#/components/parameters/After" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { name: list_id, in: query, schema: { type: string }, description: Only tasks of this list. }
+      responses:
+        "200":
+          description: Live tasks ordered by id. Smart views (My Day, Planned, ...) are filters the client derives.
+          content: { application/json: { schema: { type: object, required: [tasks], properties: { tasks: { type: array, items: { $ref: "#/components/schemas/TaskRecord" } }, next_after: { type: string } } } } }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      tags: [tasks]
+      operationId: createTask
+      summary: Create a full TodoTask with the client's id
+      description: |
+        The body is the 1.3.0 task as structured data (natural-language quick add stays on the client). Reminder delivery
+        state (`deliveredFor`, `dismissed`, `snoozedUntilUtc`) is accepted but not stored: it belongs to each device.
+        An existing id, live or deleted, returns `409 ALREADY_EXISTS` with the server copy, so a retried create is
+        recognizable and a deleted task is never resurrected by accident.
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [task], properties: { task: { $ref: "schemas/todo-v1.schema.json#/$defs/TodoTask" } } } } } }
+      responses:
+        "201": { $ref: "#/components/responses/TaskRecord" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/tasks/completion-history:
+    parameters: [{ $ref: "#/components/parameters/TenantID" }]
+    get:
+      tags: [tasks]
+      operationId: completionHistory
+      summary: The caller's completion history, newest first
+      parameters:
+        - { name: before, in: query, schema: { type: string }, description: Opaque cursor from `next_before`. }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Append-only records, including every occurrence of recurring tasks.
+          content: { application/json: { schema: { type: object, required: [history], properties: { history: { type: array, items: { $ref: "schemas/todo-v1.schema.json#/$defs/CompletionRecord" } }, next_before: { type: string } } } } }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/tasks/{id}:
+    parameters: [{ $ref: "#/components/parameters/TenantID" }, { $ref: "#/components/parameters/ResourceID" }]
+    get:
+      tags: [tasks]
+      operationId: getTask
+      summary: One task
+      responses:
+        "200": { $ref: "#/components/responses/TaskRecord" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [tasks]
+      operationId: patchTask
+      summary: Merge-patch a task, optionally appending a completion record atomically
+      description: |
+        `changes` is an RFC 7386 merge patch of the TodoTask (`null` removes a field); the result is validated as a
+        whole. `append_completion` adds one CompletionRecord (taskId = this task) in the same transaction, e.g.
+        completing one occurrence of a repeating task while advancing its due date. Retrying with the same record id
+        is harmless; a different record under the same id is `409 COMPLETION_CONFLICT`.
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                changes: { type: object }
+                append_completion: { $ref: "schemas/todo-v1.schema.json#/$defs/CompletionRecord" }
+      responses:
+        "200": { $ref: "#/components/responses/TaskRecord" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [tasks]
+      operationId: deleteTask
+      summary: Delete a task (tombstone kept for sync; completion history kept)
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }]
+      responses:
+        "204": { description: Deleted. }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/config/user/{namespace}:
+    parameters: [{ $ref: "#/components/parameters/TenantID" }, { $ref: "#/components/parameters/UserNamespace" }]
+    get:
+      tags: [settings]
+      operationId: getUserSettings
+      summary: The caller's private settings in this space
+      responses:
+        "200": { $ref: "#/components/responses/Settings" }
+        default: { $ref: "#/components/responses/Error" }
+    put:
+      tags: [settings]
+      operationId: putUserSettings
+      summary: Replace (If-Match "0" for a namespace never written)
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }]
+      requestBody: { $ref: "#/components/requestBodies/SettingsData" }
+      responses:
+        "200": { $ref: "#/components/responses/Settings" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [settings]
+      operationId: patchUserSettings
+      summary: Merge-patch
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }]
+      requestBody: { $ref: "#/components/requestBodies/SettingsChanges" }
+      responses:
+        "200": { $ref: "#/components/responses/Settings" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/config/tenant/{namespace}:
+    parameters: [{ $ref: "#/components/parameters/TenantID" }, { $ref: "#/components/parameters/SpaceNamespace" }]
+    get:
+      tags: [settings]
+      operationId: getSpaceSettings
+      summary: Space settings (any member)
+      responses:
+        "200": { $ref: "#/components/responses/Settings" }
+        default: { $ref: "#/components/responses/Error" }
+    put:
+      tags: [settings]
+      operationId: putSpaceSettings
+      summary: Replace (owner or admin)
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }]
+      requestBody: { $ref: "#/components/requestBodies/SettingsData" }
+      responses:
+        "200": { $ref: "#/components/responses/Settings" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [settings]
+      operationId: patchSpaceSettings
+      summary: Merge-patch (owner or admin)
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }]
+      requestBody: { $ref: "#/components/requestBodies/SettingsChanges" }
+      responses:
+        "200": { $ref: "#/components/responses/Settings" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/data/export:
+    get:
+      tags: [account]
+      operationId: exportData
+      summary: Export the account's data (synchronous; small accounts)
+      description: |
+        Profile, spaces, and for each space the caller's own tasks as an `alondra1-todo` document (importable by the
+        Windows app) plus personal settings. Never other members' data. Attachment files are not in the cloud.
+      responses:
+        "200":
+          description: The export.
+          content: { application/json: { schema: { type: object, required: [format, version, account, spaces] } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "413": { $ref: "#/components/responses/Error" }
 components:
+  parameters:
+    TenantID:
+      name: X-Tenant-ID
+      in: header
+      required: true
+      schema: { type: string, format: uuid }
+      description: The space. Membership is verified inside every request's transaction; non-members get `404 TENANT_NOT_FOUND`.
+    ResourceID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, pattern: "^[A-Za-z0-9_-]{1,64}$" }
+      description: The client's id (preserved on cloud enrollment).
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: string, example: '"3"' }
+      description: The version last read (ETag). Missing → `428 PRECONDITION_REQUIRED`; stale → `409 VERSION_CONFLICT` with the server copy in `error.current`. Nothing is overwritten silently.
+    After:
+      name: after
+      in: query
+      schema: { type: string }
+      description: Return ids greater than this (use `next_after`).
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 1000, default: 500 }
+    UserNamespace:
+      name: namespace
+      in: path
+      required: true
+      schema: { type: string, enum: [appearance, todo.preferences] }
+      description: |
+        `appearance`: `theme` (System, Light, Dark), `lightColors` / `darkColors` (…Brush → #RRGGBB). Background
+        pictures are local files and not synced. `todo.preferences`: `sortByView`, `sortDescendingByView`,
+        `statusFilter`, `importantOnlyFilter`, `showCounts`, `calendarMode`, `notificationsEnabled`, `snoozeMinutes`
+        (selected view and details pane stay on the device). Unknown keys are rejected.
+    SpaceNamespace:
+      name: namespace
+      in: path
+      required: true
+      schema: { type: string, enum: [space.profile] }
+      description: "`space.profile`: `accentColor` (#RRGGBB), `description` (≤ 500 characters)."
+  requestBodies:
+    Patch:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [changes]
+            properties:
+              changes: { type: object, description: RFC 7386 merge patch of the todo-v1 object; the result is validated as a whole. }
+    SettingsData:
+      required: true
+      content: { application/json: { schema: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object } } } } }
+    SettingsChanges:
+      required: true
+      content: { application/json: { schema: { type: object, additionalProperties: false, required: [changes], properties: { changes: { type: object } } } } }
   securitySchemes:
     bearer:
       type: http
@@ -494,6 +800,41 @@ components:
         role: { type: string, enum: [admin, member] }
         expires_at: { type: string, format: date-time }
         created_at: { type: string, format: date-time }
+    GroupRecord:
+      type: object
+      required: [id, version, schema_version, updated_at, group]
+      properties:
+        id: { type: string }
+        version: { type: integer, minimum: 1 }
+        schema_version: { type: integer, const: 1 }
+        updated_at: { type: string, format: date-time }
+        group: { $ref: "schemas/todo-v1.schema.json#/$defs/ListGroup" }
+    ListRecord:
+      type: object
+      required: [id, version, schema_version, updated_at, list]
+      properties:
+        id: { type: string }
+        version: { type: integer, minimum: 1 }
+        schema_version: { type: integer, const: 1 }
+        updated_at: { type: string, format: date-time }
+        list: { $ref: "schemas/todo-v1.schema.json#/$defs/TaskList" }
+    TaskRecord:
+      type: object
+      required: [id, version, schema_version, updated_at, task]
+      properties:
+        id: { type: string }
+        version: { type: integer, minimum: 1 }
+        schema_version: { type: integer, const: 1 }
+        updated_at: { type: string, format: date-time }
+        task: { $ref: "schemas/todo-v1.schema.json#/$defs/TodoTask" }
+    SettingsDoc:
+      type: object
+      required: [namespace, version, data]
+      properties:
+        namespace: { type: string }
+        version: { type: integer, minimum: 0, description: 0 when never written (data is {}). }
+        updated_at: { type: string, format: date-time }
+        data: { type: object }
     Status:
       type: object
       required: [status]
@@ -530,14 +871,37 @@ components:
               enum: [NOT_FOUND, METHOD_NOT_ALLOWED, MALFORMED_JSON, UNSUPPORTED_MEDIA_TYPE, BODY_TOO_LARGE, INVALID_EMAIL,
                      RATE_LIMITED, EMAIL_DELIVERY_FAILED, INVALID_CODE, REFRESH_INVALID, REFRESH_REUSED, UNAUTHENTICATED,
                      FORBIDDEN, LAST_OWNER, PERSONAL_SPACE, ALREADY_MEMBER, INVITE_INVALID, INVITE_EMAIL_MISMATCH,
-                     INVALID_NAME, INVALID_TYPE, INVALID_ROLE, OWNERSHIP_TRANSFER_REQUIRED, NOT_READY, INTERNAL]
+                     INVALID_NAME, INVALID_TYPE, INVALID_ROLE, OWNERSHIP_TRANSFER_REQUIRED, TENANT_REQUIRED, TENANT_NOT_FOUND,
+                     VALIDATION_FAILED, INVALID_REFERENCE, PRECONDITION_REQUIRED, VERSION_CONFLICT, ALREADY_EXISTS,
+                     COMPLETION_CONFLICT, DEFAULT_LIST, DEFAULT_LIST_EXISTS, IMMUTABLE_FIELD, INVALID_CURSOR,
+                     UNKNOWN_NAMESPACE, EXPORT_TOO_LARGE, NOT_READY, INTERNAL]
             message: { type: string }
             request_id: { type: string }
             tenant_ids:
               type: array
               items: { type: string, format: uuid }
               description: Only with OWNERSHIP_TRANSFER_REQUIRED.
+            problems:
+              type: array
+              items: { type: string }
+              description: Only with VALIDATION_FAILED.
+            current:
+              type: object
+              description: With VERSION_CONFLICT and ALREADY_EXISTS, the server's record (same shape as a GET), for the client's conflict queue.
+            current_deleted: { type: boolean }
   responses:
+    GroupRecord:
+      description: A group with its version (also in ETag).
+      content: { application/json: { schema: { $ref: "#/components/schemas/GroupRecord" } } }
+    ListRecord:
+      description: A list with its version (also in ETag).
+      content: { application/json: { schema: { $ref: "#/components/schemas/ListRecord" } } }
+    TaskRecord:
+      description: A task with its version (also in ETag).
+      content: { application/json: { schema: { $ref: "#/components/schemas/TaskRecord" } } }
+    Settings:
+      description: A settings document with its version (also in ETag).
+      content: { application/json: { schema: { $ref: "#/components/schemas/SettingsDoc" } } }
     Error:
       description: Error with a stable code.
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
@@ -552,11 +916,4 @@ x-alondra1-planned:
   # POST /v1/devices (spec §9) becomes the sync-device registration with cursors in Milestone E; until then devices
   # are registered at sign-in.
   milestone-e-devices: [POST /v1/devices]
-  milestone-d: [GET /v1/tasks, POST /v1/tasks, GET /v1/tasks/{id}, PATCH /v1/tasks/{id}, DELETE /v1/tasks/{id},
-                GET /v1/tasks/completion-history, GET /v1/task-lists, POST /v1/task-lists, GET /v1/task-lists/{id},
-                PATCH /v1/task-lists/{id}, DELETE /v1/task-lists/{id}, GET /v1/list-groups, POST /v1/list-groups,
-                GET /v1/list-groups/{id}, PATCH /v1/list-groups/{id}, DELETE /v1/list-groups/{id},
-                GET /v1/config/user/{namespace}, PUT /v1/config/user/{namespace}, PATCH /v1/config/user/{namespace},
-                GET /v1/config/tenant/{namespace}, PUT /v1/config/tenant/{namespace}, PATCH /v1/config/tenant/{namespace},
-                GET /v1/data/export]
   milestone-e: [GET /v1/sync/bootstrap, GET /v1/sync/changes, POST /v1/sync/push]

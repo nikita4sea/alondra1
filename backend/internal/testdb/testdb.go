@@ -70,7 +70,7 @@ func Start(t *testing.T, migrate bool) *pgxpool.Pool {
 // Truncate empties every application table.
 func Truncate(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
-	if _, err := pool.Exec(context.Background(), `TRUNCATE audit_log, invites, memberships, tenants, sessions, devices, auth_challenges, users RESTART IDENTITY CASCADE`); err != nil {
+	if _, err := pool.Exec(context.Background(), `TRUNCATE audit_log, user_configs, tenant_configs, task_completion_records, todo_tasks, task_lists, list_groups, invites, memberships, tenants, sessions, devices, auth_challenges, users RESTART IDENTITY CASCADE`); err != nil {
 		t.Fatal(err)
 	}
 }

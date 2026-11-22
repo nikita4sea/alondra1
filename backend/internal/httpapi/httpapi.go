@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"alondra1/backend/internal/auth"
+	"alondra1/backend/internal/settings"
+	"alondra1/backend/internal/tasks"
 	"alondra1/backend/internal/tenancy"
 )
 
@@ -28,6 +30,8 @@ const maxBodyBytes = 16 << 10
 type Server struct {
 	Auth              *auth.Service
 	Tenancy           *tenancy.Service
+	Tasks             *tasks.Service
+	Settings          *settings.Service
 	Ready             func(context.Context) error
 	Log               *slog.Logger
 	TrustProxyHeaders bool
@@ -46,30 +50,43 @@ func (s *Server) Handler() http.Handler {
 	r.handle("POST", "/v1/auth/logout-all", s.authenticated(s.logoutAll))
 	r.handle("GET", "/v1/me", s.authenticated(s.me))
 	s.tenancyRoutes(r)
-	r.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, r, http.StatusNotFound, "NOT_FOUND", "No such endpoint.")
-	})
+	s.taskRoutes(r)
+	r.mux.HandleFunc("/", r.unmatched)
 	return s.middleware(r.mux)
 }
 
-// router registers "METHOD /path" routes and, for every path, a method-less fallback that answers other methods with
-// a JSON 405 (the standard mux would answer in plain text).
+// router registers "METHOD /path" routes. Requests that match no route reach unmatched, which answers in JSON: 405
+// when the path exists for other methods (the standard mux would answer in plain text), 404 otherwise.
 type router struct {
 	mux     *http.ServeMux
-	methods map[string][]string
+	methods map[string]bool
 }
 
-func newRouter() *router { return &router{mux: http.NewServeMux(), methods: map[string][]string{}} }
+func newRouter() *router { return &router{mux: http.NewServeMux(), methods: map[string]bool{}} }
 
 func (r *router) handle(method, path string, handler http.Handler) {
 	r.mux.Handle(method+" "+path, handler)
-	if _, seen := r.methods[path]; !seen {
-		r.mux.HandleFunc(path, func(w http.ResponseWriter, req *http.Request) {
-			w.Header().Set("Allow", strings.Join(r.methods[path], ", "))
-			writeError(w, req, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "This endpoint does not support "+req.Method+".")
-		})
+	r.methods[method] = true
+}
+
+func (r *router) unmatched(w http.ResponseWriter, req *http.Request) {
+	var allowed []string
+	for _, method := range []string{"GET", "POST", "PUT", "PATCH", "DELETE"} {
+		if !r.methods[method] || method == req.Method {
+			continue
+		}
+		probe := req.Clone(req.Context())
+		probe.Method = method
+		if _, pattern := r.mux.Handler(probe); pattern != "" && pattern != "/" {
+			allowed = append(allowed, method)
+		}
 	}
-	r.methods[path] = append(r.methods[path], method)
+	if len(allowed) == 0 {
+		writeError(w, req, http.StatusNotFound, "NOT_FOUND", "No such endpoint.")
+		return
+	}
+	w.Header().Set("Allow", strings.Join(allowed, ", "))
+	writeError(w, req, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "This endpoint does not support "+req.Method+".")
 }
 
 // ---------- middleware ----------
@@ -335,12 +352,14 @@ func (s *Server) clientIP(r *http.Request) string {
 
 // ---------- JSON ----------
 
-func decode(w http.ResponseWriter, r *http.Request, target any) bool {
+func decode(w http.ResponseWriter, r *http.Request, target any) bool { return decodeLimit(w, r, target, maxBodyBytes) }
+
+func decodeLimit(w http.ResponseWriter, r *http.Request, target any, limit int64) bool {
 	if mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mediaType != "application/json" {
 		writeError(w, r, http.StatusUnsupportedMediaType, "UNSUPPORTED_MEDIA_TYPE", "Send application/json.")
 		return false
 	}
-	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes))
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		var tooLarge *http.MaxBytesError

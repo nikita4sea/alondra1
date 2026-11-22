@@ -11,6 +11,36 @@ This is the release history, with what was verified for each release and what wa
 
 **Test machine:** one PC running Windows build 10.0.26300 (DisplayVersion 26H2). That is the only OS any release was launched on.
 
+## Unreleased: cloud backend, Milestone D (2026-11-22)
+
+- **Tasks in the cloud:**
+  - Groups, lists, tasks, and completion history are stored in the exact todo-v1 shape the Windows app writes, with the client's ids. Dates, local times, and instants stay as sent.
+  - Private to each user within a space. Owners and admins cannot read members' tasks.
+  - Every record has a version. Writes need `If-Match`, and a stale write returns the server copy instead of overwriting it.
+  - References between records are checked, and deleting a group or list cascades (the default list cannot be deleted). Deletes leave tombstones.
+  - A completion record can be appended atomically with a task change, and retrying it does not duplicate it.
+  - Reminder delivery state and group collapse stay on each device.
+- **Settings:** allowlisted namespaces with strict schemas: `appearance` and `todo.preferences` per user, `space.profile` per space.
+- **Export:** `GET /v1/data/export` returns everything of the caller, with tasks as `alondra1-todo` documents.
+- **Decisions:** [ADR 0004](decisions/0004-cloud-task-storage.md); migration `0003_tasks`.
+- **Routing:** a JSON 405 now comes from one catch-all that checks other methods, because per-path fallbacks conflicted with wildcard routes.
+- **Verified:**
+  - Go unit tests pass: validation against the Windows golden fixture plus negative cases, merge patch, and the settings allowlists.
+  - An end-to-end HTTP test with four users on PostgreSQL 17 covers:
+    - enrolling the Windows fixture with its values intact;
+    - privacy towards members and admins;
+    - the same id held by different users;
+    - references across users rejected;
+    - `If-Match`, conflicts, and two concurrent edits where exactly one wins;
+    - atomic, idempotent completion;
+    - cascades and tombstones;
+    - settings versions and roles;
+    - the export;
+    - a removed member losing access at once.
+  - Windows: 120 passed, 1 skipped. A new test imports a cloud-shaped document (device-local fields removed) into the app.
+  - The built API applied all three migrations at startup.
+- **Not verified:** Docker, mailpit, and CI on this machine. The Windows app does not use the backend yet.
+
 ## Unreleased: cloud backend, Milestone C and review fixes (2026-11-22)
 
 - **Review fixes (Milestone B):**

@@ -111,6 +111,37 @@ public class ContractSchemaTests
         }
     }
 
+    /// <summary>
+    /// The cloud never stores device-local state (reminder delivery, group collapse). A document in that shape, as the
+    /// backend's export returns it, must still import into the Windows app with nothing lost but those fields.
+    /// </summary>
+    [Fact]
+    public void Cloud_shaped_documents_import_into_the_windows_app()
+    {
+        var document = JsonNode.Parse(File.ReadAllText(Path.Combine(FixtureDirectory, "full-document.json")))!.AsObject();
+        foreach (var group in document["groups"]!.AsArray())
+            group!.AsObject().Remove("collapsed");
+        foreach (var task in document["tasks"]!.AsArray())
+        {
+            foreach (var reminder in task!["reminders"]?.AsArray() ?? [])
+            {
+                foreach (var deviceLocal in new[] { "deliveredFor", "dismissed", "snoozedUntilUtc" })
+                    reminder!.AsObject().Remove(deviceLocal);
+            }
+        }
+
+        var plan = TodoTransfer.PrepareImport(document.ToJsonString(), new TodoData());
+        Assert.True(plan.Ok, string.Join("; ", plan.Errors));
+        Assert.Equal(3, plan.Data!.Tasks.Count);
+        Assert.Equal(2, plan.Data.Lists.Count);
+        Assert.Equal(3, plan.Data.History.Count);
+        var monthEnd = plan.Data.Tasks.Single(task => task.Title == "Close the books");
+        Assert.Equal(new DateOnly(2026, 3, 31), monthEnd.DueDate);
+        Assert.Equal(new DateTime(2026, 3, 29, 2, 30, 0), monthEnd.Reminders[0].At);
+        Assert.Null(monthEnd.Reminders[0].DeliveredFor);
+        Assert.Equal(["Export statements", "Reconcile", "Send summary"], monthEnd.Subtasks.Select(step => step.Title));
+    }
+
     private static void AssertDeclared(JsonObject value, JsonObject properties)
     {
         foreach (var (name, _) in value)

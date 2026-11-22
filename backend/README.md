@@ -2,7 +2,7 @@
 
 The optional cloud for Alondra1 ([ADR 0001](../docs/decisions/0001-opt-in-cloud.md), [BACKEND_SPEC.md](../docs/BACKEND_SPEC.md)). It is not a replacement for the Windows app, and the Windows app does not use it yet.
 
-**Status: Milestone C.** Implemented: runtime configuration from secret files, PostgreSQL connection with retry, forward-only migrations, SMTP delivery, email one-time-code sign-in with rotating refresh tokens (B); spaces with roles, invitations, devices, and account deletion (C). Tasks, settings, and sync are Milestones D and E.
+**Status: Milestone D.** Implemented: runtime configuration from secret files, PostgreSQL connection with retry, forward-only migrations, SMTP delivery, email one-time-code sign-in with rotating refresh tokens (B); spaces with roles, invitations, devices, and account deletion (C); tasks, lists, groups, completion history, portable settings, and export (D). Sync is Milestone E.
 
 ## Layout
 
@@ -15,6 +15,8 @@ The optional cloud for Alondra1 ([ADR 0001](../docs/decisions/0001-opt-in-cloud.
 | `internal/postgres` | Connection with backoff, migration runner (advisory lock, downgrade refusal), PostgreSQL `auth.Store`. |
 | `internal/mail` | SMTP sender: STARTTLS or implicit TLS; plaintext only for the local mailpit sink. |
 | `internal/tenancy` | Spaces: types, roles and permission rules (pure functions), invitations, member removal, ownership transfer, account deletion; every change runs in one transaction that locks the space. |
+| `internal/tasks` | The todo-v1 model: strict validation, device-local fields dropped, merge patch, versions, references, cascades, completion history, export. |
+| `internal/settings` | Allowlisted settings namespaces with strict schemas and versions. |
 | `internal/httpapi` | Routes, JSON error contract, request ids, auth middleware. |
 | `internal/testdb` | Real, migrated PostgreSQL 17 for integration tests (embedded or `ALONDRA1_TEST_DATABASE_URL`). |
 | `migrations` | `NNNN_name.sql`, embedded into the binary. |
@@ -40,6 +42,18 @@ The HTTP contract is [packages/api-contract/openapi.yaml](../packages/api-contra
 - Invitations: emailed token (`a1i_`, 256-bit, stored as SHA-256, never returned by the API), 7 days, one use, only for the signed-in account with the invited address; a new one replaces a pending one; 20 per space per hour. If the email cannot be sent, the invitation is revoked.
 - Account deletion: refused while the user is the only owner of a space with other members (`OWNERSHIP_TRANSFER_REQUIRED` with the space ids); otherwise solo spaces are deleted, memberships end, sessions and devices are revoked, and the address is pseudonymized so it can sign up again. Retention: [ADR 0003](../docs/decisions/0003-retention.md).
 - Request logs record the route pattern, never the raw path, so invitation tokens never reach the logs.
+
+## Tasks and settings (spec §6 to §8)
+
+- Resources are the todo-v1 objects the Windows app writes, wrapped in `{id, version, schema_version, updated_at, task | list | group}`. The space comes from `X-Tenant-ID`; membership is checked inside each transaction.
+- Private: every row is (space, owner, client id). Nobody else in the space, admins included, can read it.
+- Writes need `If-Match`. A stale version gets `409 VERSION_CONFLICT` with the server copy; creating an existing or deleted id gets `409 ALREADY_EXISTS`.
+- Deleting a group ungroups its lists; deleting a list deletes its tasks; the default list stays. Tombstones and completion history are kept.
+- `append_completion` adds a completion record atomically with a task change, idempotent by its id.
+- Reminder delivery state and group collapse are device-local: accepted, never stored.
+- Settings: `appearance` and `todo.preferences` per user, `space.profile` per space (owners and admins write). Unknown keys are rejected.
+- `GET /v1/data/export`: everything of the caller, with tasks per space as an `alondra1-todo` document the Windows app imports.
+- Decisions: [ADR 0004](../docs/decisions/0004-cloud-task-storage.md).
 
 ## Develop
 

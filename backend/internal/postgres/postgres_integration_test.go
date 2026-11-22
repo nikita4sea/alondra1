@@ -7,6 +7,7 @@ package postgres_test
 
 import (
 	"context"
+	"io/fs"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -30,14 +31,19 @@ func TestPostgres(t *testing.T) {
 		if err := postgres.Migrate(ctx, pool, migrations.FS, quiet); err != nil {
 			t.Fatalf("second run must be a no-op: %v", err)
 		}
+		files, _ := fs.Glob(migrations.FS, "*.sql")
 		var count int
-		if err := pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 2 {
+		if err := pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != len(files) {
 			t.Fatalf("schema_migrations: %d %v", count, err)
 		}
 	})
 
 	t.Run("an unknown applied migration blocks a downgrade", func(t *testing.T) {
-		older := fstest.MapFS{"0001_auth.sql": {Data: []byte("SELECT 1")}, "0002_tenancy.sql": {Data: []byte("SELECT 1")}}
+		older := fstest.MapFS{}
+		files, _ := fs.Glob(migrations.FS, "*.sql")
+		for _, name := range files {
+			older[name] = &fstest.MapFile{Data: []byte("SELECT 1")}
+		}
 		if _, err := pool.Exec(ctx, "INSERT INTO schema_migrations (version) VALUES ('9999_future')"); err != nil {
 			t.Fatal(err)
 		}
