@@ -151,6 +151,24 @@ func TestSafeRelativePath(t *testing.T) {
 	}
 }
 
+func TestComposePatchKeepsRemovals(t *testing.T) {
+	composed, err := ComposePatch(json.RawMessage(`{"title":"a","recurrence":{"interval":2}}`), json.RawMessage(`{"myDayDate":null,"recurrence":{"until":null}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Applying the composed patch equals applying both in order.
+	target := json.RawMessage(`{"title":"old","myDayDate":"2026-11-21","recurrence":{"frequency":"Daily","interval":1,"until":"2026-12-31"}}`)
+	once, _ := MergePatch(target, composed)
+	step, _ := MergePatch(target, json.RawMessage(`{"title":"a","recurrence":{"interval":2}}`))
+	twice, _ := MergePatch(step, json.RawMessage(`{"myDayDate":null,"recurrence":{"until":null}}`))
+	if string(once) != string(twice) {
+		t.Fatalf("composed %s\nonce  %s\ntwice %s", composed, once, twice)
+	}
+	if strings.Contains(string(once), "myDayDate") || strings.Contains(string(once), "until") {
+		t.Fatalf("removals lost: %s", once)
+	}
+}
+
 func TestMergePatch(t *testing.T) {
 	merged, err := MergePatch(json.RawMessage(`{"title":"a","dueDate":"2026-11-22","recurrence":{"frequency":"Daily","interval":1}}`),
 		json.RawMessage(`{"title":"b","dueDate":null,"recurrence":{"interval":2}}`))

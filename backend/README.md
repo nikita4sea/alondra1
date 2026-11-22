@@ -2,7 +2,7 @@
 
 The optional cloud for Alondra1 ([ADR 0001](../docs/decisions/0001-opt-in-cloud.md), [BACKEND_SPEC.md](../docs/BACKEND_SPEC.md)). It is not a replacement for the Windows app, and the Windows app does not use it yet.
 
-**Status: Milestone D.** Implemented: runtime configuration from secret files, PostgreSQL connection with retry, forward-only migrations, SMTP delivery, email one-time-code sign-in with rotating refresh tokens (B); spaces with roles, invitations, devices, and account deletion (C); tasks, lists, groups, completion history, portable settings, and export (D). Sync is Milestone E.
+**Status: Milestone E.** Implemented: runtime configuration from secret files, PostgreSQL connection with retry, forward-only migrations, SMTP delivery, email one-time-code sign-in with rotating refresh tokens (B); spaces with roles, invitations, devices, and account deletion (C); tasks, lists, groups, completion history, portable settings, and export (D); sync with change log, paged bootstrap, signed change cursors, idempotent push, and a reference offline-first client (E). Operational readiness is Milestone F; the Windows cloud adapter is not written yet.
 
 ## Layout
 
@@ -17,6 +17,8 @@ The optional cloud for Alondra1 ([ADR 0001](../docs/decisions/0001-opt-in-cloud.
 | `internal/tenancy` | Spaces: types, roles and permission rules (pure functions), invitations, member removal, ownership transfer, account deletion; every change runs in one transaction that locks the space. |
 | `internal/tasks` | The todo-v1 model: strict validation, device-local fields dropped, merge patch, versions, references, cascades, completion history, export. |
 | `internal/settings` | Allowlisted settings namespaces with strict schemas and versions. |
+| `internal/cloudsync` | Sync pull side: signed cursors, paged bootstrap with watermark, change feed. (Push is `tasks.Service.Push`.) |
+| `internal/cloudsync/client` | Reference offline-first client: local copy, outbox with patch composition, conflict queue, bootstrap replay, purge on lost access. Drives the multi-device tests. |
 | `internal/httpapi` | Routes, JSON error contract, request ids, auth middleware. |
 | `internal/testdb` | Real, migrated PostgreSQL 17 for integration tests (embedded or `ALONDRA1_TEST_DATABASE_URL`). |
 | `migrations` | `NNNN_name.sql`, embedded into the binary. |
@@ -54,6 +56,14 @@ The HTTP contract is [packages/api-contract/openapi.yaml](../packages/api-contra
 - Settings: `appearance` and `todo.preferences` per user, `space.profile` per space (owners and admins write). Unknown keys are rejected.
 - `GET /v1/data/export`: everything of the caller, with tasks per space as an `alondra1-todo` document the Windows app imports.
 - Decisions: [ADR 0004](../docs/decisions/0004-cloud-task-storage.md).
+
+## Sync (spec §10)
+
+- Every write (REST or push) appends to `change_log` in the same transaction; writers of a space serialize on an advisory lock, so sequences are visible in commit order.
+- `GET /v1/sync/bootstrap`: paged snapshot (groups, lists, tasks, completions, personal settings, space settings) with a watermark cursor.
+- `GET /v1/sync/changes?cursor=`: ordered entries after a signed cursor bound to user and space; only what the caller may see; `410 CURSOR_EXPIRED` below the retention floor.
+- `POST /v1/sync/push`: up to 100 mutations, each `applied`, `conflict` (with the server copy), or `rejected`; applied ones are recorded per device and mutation id, so retries never apply twice. Delete-versus-edit surfaces as a conflict.
+- Client rules (outbox, patch composition, conflicts, expired cursors, lost access): [ADR 0005](../docs/decisions/0005-sync-protocol.md), implemented by `internal/cloudsync/client`.
 
 ## Develop
 

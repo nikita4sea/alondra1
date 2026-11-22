@@ -10,7 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"alondra1/backend/internal/auth"
+	"alondra1/backend/internal/cloudsync"
 	"alondra1/backend/internal/httpapi"
 	"alondra1/backend/internal/postgres"
 	"alondra1/backend/internal/settings"
@@ -43,6 +46,7 @@ type world struct {
 	*fixture
 	box   *postbox
 	clock *syncClock
+	pool  *pgxpool.Pool
 }
 
 type syncClock struct {
@@ -67,10 +71,11 @@ func newWorld(t *testing.T) *world {
 	authSvc := auth.NewService(postgres.NewAuthStore(pool), box, signer, []byte(strings.Repeat("o", 48)), clock.Now, opts, testdb.Quiet)
 	spaces := tenancy.NewService(postgres.NewTenancyStore(pool), box, clock.Now, testdb.Quiet)
 	api := &httpapi.Server{Auth: authSvc, Tenancy: spaces, Log: testdb.Quiet,
-		Tasks: tasks.NewService(postgres.NewTaskStore(pool), clock.Now), Settings: settings.NewService(postgres.NewSettingsStore(pool), clock.Now)}
+		Tasks: tasks.NewService(postgres.NewTaskStore(pool), clock.Now), Settings: settings.NewService(postgres.NewSettingsStore(pool), clock.Now),
+		Sync: cloudsync.NewService(postgres.NewSyncStore(pool), []byte(strings.Repeat("k", 48)))}
 	f := &fixture{server: httptest.NewServer(api.Handler())}
 	t.Cleanup(f.server.Close)
-	return &world{fixture: f, box: box, clock: clock}
+	return &world{fixture: f, box: box, clock: clock, pool: pool}
 }
 
 // signIn returns an access token for the address (a new device each time).

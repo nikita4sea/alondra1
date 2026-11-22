@@ -14,6 +14,7 @@ import (
 
 	"alondra1/backend/internal/appconfig"
 	"alondra1/backend/internal/auth"
+	"alondra1/backend/internal/cloudsync"
 	"alondra1/backend/internal/httpapi"
 	"alondra1/backend/internal/mail"
 	"alondra1/backend/internal/postgres"
@@ -66,7 +67,7 @@ func run(log *slog.Logger) error {
 	spaces := tenancy.NewService(postgres.NewTenancyStore(pool), mailer, time.Now, log)
 	todo := tasks.NewService(postgres.NewTaskStore(pool), time.Now)
 	prefs := settings.NewService(postgres.NewSettingsStore(pool), time.Now)
-	api := &httpapi.Server{Auth: service, Tenancy: spaces, Tasks: todo, Settings: prefs, Ready: pool.Ping, Log: log, TrustProxyHeaders: cfg.TrustProxyHeaders}
+	api := &httpapi.Server{Auth: service, Tenancy: spaces, Tasks: todo, Settings: prefs, Sync: cloudsync.NewService(postgres.NewSyncStore(pool), cfg.TokenKey), Ready: pool.Ping, Log: log, TrustProxyHeaders: cfg.TrustProxyHeaders}
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,

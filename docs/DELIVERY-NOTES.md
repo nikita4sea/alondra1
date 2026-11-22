@@ -11,6 +11,37 @@ This is the release history, with what was verified for each release and what wa
 
 **Test machine:** one PC running Windows build 10.0.26300 (DisplayVersion 26H2). That is the only OS any release was launched on.
 
+## Unreleased: cloud backend, Milestone E: sync (2026-11-22)
+
+- **Change log:**
+  - Every write to tasks, lists, groups, completion history, and settings, through REST or push, appends an entry in the same transaction.
+  - Writers of one space serialize on an advisory lock, so sequence numbers become visible in commit order.
+  - Migration `0004_sync`.
+- **Pull side:**
+  - `GET /v1/sync/bootstrap`: paged snapshot with a watermark.
+  - `GET /v1/sync/changes`: an ordered feed after a signed cursor bound to the user and the space. It carries only what the caller may see, and a cursor below the retention floor gets `410 CURSOR_EXPIRED`.
+- **Push:** `POST /v1/sync/push` takes up to 100 mutations, each `applied`, `conflict` (with the server copy), or `rejected`.
+  - Applied mutations are recorded per device and mutation id, so a retried batch never applies twice.
+  - An edit of a task deleted elsewhere is a visible conflict.
+- **Reference client:** `internal/cloudsync/client` is an offline-first client: local copy, outbox, conflict queue, bootstrap replay, and purge on lost access. [ADR 0005](decisions/0005-sync-protocol.md) states the rules every client must follow.
+- **Found by the multi-device tests:** coalescing two offline edits with merge-patch application dropped a `null` ("remove from My Day"). Clients must compose patches; `tasks.ComposePatch` does this, with a unit test that composed equals sequential.
+- **Verified:**
+  - Go unit tests and vet are clean.
+  - Integration on PostgreSQL 17 covers a multi-device test with 11 scenarios:
+    - a second device bootstraps everything;
+    - a day of offline work syncs completely (coalesced edits, delete, atomic completion);
+    - concurrent offline edits give a visible conflict and are resolved by re-applying;
+    - delete-versus-edit is a visible conflict;
+    - a retried batch is replayed and not applied again;
+    - an expired cursor gives `410`, then a bootstrap that keeps the unsent outbox;
+    - the feed carries only what each member may see;
+    - cursors are bound to their user and space and cannot be forged;
+    - bootstrap paging returns each item exactly once;
+    - 20 concurrent writers produce a complete, ordered feed;
+    - a removed member's device purges the space and keeps unsent edits aside.
+  - The built API applied all four migrations.
+- **Not done yet:** the Windows cloud adapter and UI; Docker, mailpit, and CI on this machine.
+
 ## Unreleased: mail connection fixes (2026-11-22)
 
 Found with two real mailboxes on a provider that uses Implicit TLS everywhere (IMAP 993, POP3 995, SMTP 465) and keeps its special folders under `INBOX.` (for example `INBOX.INBOX.Sent`).

@@ -194,6 +194,41 @@ func (t taskTx) Completions(ctx context.Context, before *tasks.Cursor, limit int
 	return items, nil, rows.Err()
 }
 
+func (t taskTx) Log(ctx context.Context, c tasks.Change, now time.Time) error {
+	return logChange(ctx, t.tx, t.scope.TenantID, c, now)
+}
+
+func (t taskTx) Receipt(ctx context.Context, deviceID, mutationID string) (json.RawMessage, bool, error) {
+	var result []byte
+	err := t.tx.QueryRow(ctx, `SELECT result FROM mutation_receipts WHERE tenant_id = $1 AND user_id = $2 AND device_id = $3 AND mutation_id = $4`,
+		t.scope.TenantID, t.scope.UserID, deviceID, mutationID).Scan(&result)
+	if isNoRows(err) {
+		return nil, false, nil
+	}
+	return result, err == nil, err
+}
+
+func (t taskTx) SaveReceipt(ctx context.Context, deviceID, mutationID string, result json.RawMessage, now time.Time) error {
+	_, err := t.tx.Exec(ctx, `INSERT INTO mutation_receipts (tenant_id, user_id, device_id, mutation_id, result, created_at) VALUES ($1, $2, $3, $4, $5, $6)`,
+		t.scope.TenantID, t.scope.UserID, deviceID, mutationID, []byte(result), now)
+	return err
+}
+
+// logChange appends to the change log. The transaction first takes the space's advisory lock (held until commit), so
+// sequence numbers of one space are assigned in commit order: no reader can see N+1 while N is still uncommitted.
+func logChange(ctx context.Context, tx pgx.Tx, tenantID string, c tasks.Change, now time.Time) error {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 7351))`, "change_log:"+tenantID); err != nil {
+		return err
+	}
+	var visible any
+	if c.VisibleTo != "" {
+		visible = c.VisibleTo
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO change_log (tenant_id, resource_type, resource_id, action, payload, visibility_user_id, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`, tenantID, c.ResourceType, c.ResourceID, c.Action, []byte(c.Payload), visible, now)
+	return err
+}
+
 // mapUnique turns the one-default-list unique index into its domain error.
 func mapUnique(err error) error {
 	var pgErr *pgconn.PgError
@@ -239,6 +274,10 @@ func (t settingsTx) Get(ctx context.Context, level settings.Level, namespace str
 	}
 	doc.Data = data
 	return doc, err
+}
+
+func (t settingsTx) Log(ctx context.Context, c tasks.Change, now time.Time) error {
+	return logChange(ctx, t.tx, t.scope.TenantID, c, now)
 }
 
 // Put inserts version 1 or updates from version-1; a concurrent first write loses with a version conflict.

@@ -66,9 +66,13 @@ func (s *Server) inSpace(next func(http.ResponseWriter, *http.Request, tasks.Sco
 	})
 }
 
+// envelope is the API shape of a record (shared with sync).
 func envelope(single string, rec tasks.Record) map[string]any {
-	return map[string]any{"id": rec.ID, "version": rec.Version, "schema_version": tasks.SchemaVersion,
-		"updated_at": rec.UpdatedAt.UTC().Format(time.RFC3339Nano), single: rec.Data}
+	kind, _ := tasks.ParseKind(single)
+	if single == "record" || single == "settings" || single == "export" {
+		return map[string]any{"id": rec.ID, "version": rec.Version, "data": rec.Data}
+	}
+	return tasks.Envelope(kind, rec)
 }
 
 func setETag(w http.ResponseWriter, version int64) {
@@ -216,13 +220,7 @@ func (s *Server) history(w http.ResponseWriter, r *http.Request, scope tasks.Sco
 	writeJSON(w, http.StatusOK, body)
 }
 
-func settingsJSON(d settings.Doc) map[string]any {
-	body := map[string]any{"namespace": d.Namespace, "version": d.Version, "data": d.Data}
-	if d.Version > 0 {
-		body["updated_at"] = d.UpdatedAt.UTC().Format(time.RFC3339Nano)
-	}
-	return body
-}
+func settingsJSON(d settings.Doc) map[string]any { return settings.Record(d) }
 
 func (s *Server) getSettings(w http.ResponseWriter, r *http.Request, scope tasks.Scope, level settings.Level) {
 	doc, err := s.Settings.Get(r.Context(), scope, level, r.PathValue("namespace"))

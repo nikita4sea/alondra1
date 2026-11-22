@@ -178,6 +178,8 @@ var (
 type Tx interface {
 	Get(ctx context.Context, level Level, namespace string, lock bool) (Doc, error) // Version 0 if missing
 	Put(ctx context.Context, level Level, doc Doc) error                              // insert or update
+	// Log appends to the space's change log (see tasks.Tx.Log).
+	Log(ctx context.Context, c tasks.Change, now time.Time) error
 }
 
 type Store interface {
@@ -237,7 +239,10 @@ func (s *Service) Write(ctx context.Context, scope tasks.Scope, level Level, nam
 			return err
 		}
 		out = Doc{Namespace: name, Data: clean, Version: current.Version + 1, UpdatedAt: s.now().UTC()}
-		return tx.Put(ctx, level, out)
+		if err := tx.Put(ctx, level, out); err != nil {
+			return err
+		}
+		return logChange(ctx, tx, scope, level, out)
 	})
 	return out, err
 }
@@ -253,3 +258,33 @@ func UserNamespaces() []string {
 	return names
 }
 
+
+// ResourceType is the sync resource_type of a settings level.
+func ResourceType(level Level) string {
+	if level == Space {
+		return "tenant_config"
+	}
+	return "user_config"
+}
+
+// Record is the sync and API representation of a settings document.
+func Record(d Doc) map[string]any {
+	record := map[string]any{"namespace": d.Namespace, "version": d.Version, "data": d.Data}
+	if d.Version > 0 {
+		record["updated_at"] = d.UpdatedAt.UTC().Format(time.RFC3339Nano)
+	}
+	return record
+}
+
+// logChange records the write in the change log: personal settings only for their owner, space settings for everyone.
+func logChange(ctx context.Context, tx Tx, scope tasks.Scope, level Level, d Doc) error {
+	visible := scope.UserID
+	if level == Space {
+		visible = ""
+	}
+	payload, err := json.Marshal(map[string]any{"resource_type": ResourceType(level), "action": "upsert", "resource_id": d.Namespace, "record": Record(d)})
+	if err != nil {
+		return err
+	}
+	return tx.Log(ctx, tasks.Change{ResourceType: ResourceType(level), ResourceID: d.Namespace, Action: "upsert", Payload: payload, VisibleTo: visible}, d.UpdatedAt)
+}

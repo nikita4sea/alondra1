@@ -1,12 +1,12 @@
 openapi: 3.1.0
 info:
   title: Alondra1 cloud API
-  version: 1.0.0-milestone-d
+  version: 1.0.0-milestone-e
   description: |
     Optional cloud for Alondra1 (docs/BACKEND_SPEC.md, docs/decisions/0001-opt-in-cloud.md). This file is the source
     of truth for the /v1 API. Implemented: health, email one-time-code authentication (Milestone B), spaces with roles
     and invitations, devices, and account deletion (Milestone C), tasks, lists, groups, completion history, settings, and
-    export (Milestone D). The endpoints in `x-alondra1-planned` are specified in
+    export (Milestone D), and sync: bootstrap, change feed, and idempotent push (Milestone E). The endpoints in `x-alondra1-planned` are specified in
     the backend spec §9 and will be added here as they are implemented.
 
     Spaces: a caller who is not an active member of a space gets `404 NOT_FOUND` for it, exactly as for an id that does
@@ -28,6 +28,7 @@ tags:
   - name: devices
   - name: tasks
   - name: settings
+  - name: sync
 paths:
   /v1/health/live:
     get:
@@ -706,6 +707,129 @@ paths:
           content: { application/json: { schema: { type: object, required: [format, version, account, spaces] } } }
         "401": { $ref: "#/components/responses/Error" }
         "413": { $ref: "#/components/responses/Error" }
+  /v1/sync/bootstrap:
+    parameters: [{ $ref: "#/components/parameters/TenantID" }]
+    get:
+      tags: [sync]
+      operationId: syncBootstrap
+      summary: The caller's current state in this space, in pages
+      description: |
+        The first call (no page_token) fixes a watermark at the newest change-log entry. Keep calling with
+        `next_page_token` until it is absent, applying items in order (groups, lists, tasks, completion records,
+        personal settings, space settings). Then read `/v1/sync/changes` from `cursor`: every change after the watermark
+        arrives there, so nothing is missed even if records changed while you paged (an item may arrive twice; apply by
+        version). Keep your unsent outbox while bootstrapping.
+      parameters:
+        - { name: page_token, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: One page.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, cursor]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/SyncItem" } }
+                  next_page_token: { type: string }
+                  cursor: { type: string, description: Opaque, signed, bound to this user and space. }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/sync/changes:
+    parameters: [{ $ref: "#/components/parameters/TenantID" }]
+    get:
+      tags: [sync]
+      operationId: syncChanges
+      summary: What changed after the cursor
+      description: |
+        Ordered by sequence. Only the caller's private resources and the space settings are included. Deletions are
+        tombstones (`action: delete` with the deleting version). `410 CURSOR_EXPIRED`: bootstrap again without discarding
+        unsent mutations. `404 TENANT_NOT_FOUND`: you are no longer a member; remove this space's cloud copy from the
+        device.
+      parameters:
+        - { name: cursor, in: query, required: true, schema: { type: string } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200":
+          description: Changes and the next cursor.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [changes, cursor, has_more]
+                properties:
+                  changes:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/SyncItem"
+                        - { type: object, required: [sequence], properties: { sequence: { type: integer } } }
+                  cursor: { type: string }
+                  has_more: { type: boolean }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/sync/push:
+    parameters: [{ $ref: "#/components/parameters/TenantID" }]
+    post:
+      tags: [sync]
+      operationId: syncPush
+      summary: Apply up to 100 queued local mutations
+      description: |
+        Mutations are applied in order, each atomically. Every applied mutation is recorded per device and
+        `mutation_id`; sending the same batch again (for example after a lost response) returns the same results with
+        `replayed: true` and changes nothing. `conflict` results carry the server copy in `current` and change nothing:
+        keep the local edit in a conflict queue and let the user keep the server version or re-apply on top of it with
+        a new mutation and `base_version` = `current.version`. `rejected` results are invalid and change nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [mutations]
+              properties:
+                mutations:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [mutation_id, resource_type, action, resource_id]
+                    properties:
+                      mutation_id: { type: string, pattern: "^[A-Za-z0-9_-]{1,64}$", description: Unique per device; generated when the local change is made. }
+                      resource_type: { type: string, enum: [group, list, task] }
+                      action: { type: string, enum: [create, patch, delete] }
+                      resource_id: { type: string }
+                      base_version: { type: integer, minimum: 1, description: Required for patch and delete. }
+                      resource: { type: object, description: create — the todo-v1 object. }
+                      changes: { type: object, description: patch — RFC 7386 merge patch. }
+                      append_completion: { $ref: "schemas/todo-v1.schema.json#/$defs/CompletionRecord" }
+      responses:
+        "200":
+          description: One result per mutation, in order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [mutation_id, status]
+                      properties:
+                        mutation_id: { type: string }
+                        status: { type: string, enum: [applied, conflict, rejected] }
+                        code: { type: string, enum: [VERSION_CONFLICT, ALREADY_EXISTS, COMPLETION_CONFLICT, NOT_FOUND, VALIDATION_FAILED, INVALID_REFERENCE, INVALID_MUTATION] }
+                        message: { type: string }
+                        problems: { type: array, items: { type: string } }
+                        record: { type: object, description: applied — the new record envelope (absent for delete). }
+                        current: { type: object, description: conflict — the server copy. }
+                        current_deleted: { type: boolean }
+                        replayed: { type: boolean }
+        default: { $ref: "#/components/responses/Error" }
 components:
   parameters:
     TenantID:
@@ -774,6 +898,15 @@ components:
       scheme: bearer
       description: Access token from verify or refresh; valid 15 minutes.
   schemas:
+    SyncItem:
+      type: object
+      required: [resource_type, action, resource_id]
+      properties:
+        resource_type: { type: string, enum: [group, list, task, completion, user_config, tenant_config] }
+        action: { type: string, enum: [upsert, delete] }
+        resource_id: { type: string }
+        record: { type: object, description: "upsert: group/list/task envelope (as GET), completion record, or settings document {namespace, version, data}." }
+        version: { type: integer, description: delete — the version of the tombstone. }
     Space:
       type: object
       required: [id, type, name, role, created_at]
@@ -874,7 +1007,7 @@ components:
                      INVALID_NAME, INVALID_TYPE, INVALID_ROLE, OWNERSHIP_TRANSFER_REQUIRED, TENANT_REQUIRED, TENANT_NOT_FOUND,
                      VALIDATION_FAILED, INVALID_REFERENCE, PRECONDITION_REQUIRED, VERSION_CONFLICT, ALREADY_EXISTS,
                      COMPLETION_CONFLICT, DEFAULT_LIST, DEFAULT_LIST_EXISTS, IMMUTABLE_FIELD, INVALID_CURSOR,
-                     UNKNOWN_NAMESPACE, EXPORT_TOO_LARGE, NOT_READY, INTERNAL]
+                     UNKNOWN_NAMESPACE, EXPORT_TOO_LARGE, INVALID_BATCH, CURSOR_EXPIRED, NOT_READY, INTERNAL]
             message: { type: string }
             request_id: { type: string }
             tenant_ids:
@@ -913,7 +1046,6 @@ components:
 security:
   - bearer: []
 x-alondra1-planned:
-  # POST /v1/devices (spec §9) becomes the sync-device registration with cursors in Milestone E; until then devices
-  # are registered at sign-in.
-  milestone-e-devices: [POST /v1/devices]
-  milestone-e: [GET /v1/sync/bootstrap, GET /v1/sync/changes, POST /v1/sync/push]
+  # POST /v1/devices (spec §9) is not needed: devices are registered at sign-in, and push receipts are keyed by the
+  # signed-in device (docs/decisions/0005-sync-protocol.md).
+  not-planned: [POST /v1/devices]

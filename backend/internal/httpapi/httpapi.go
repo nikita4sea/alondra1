@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"alondra1/backend/internal/auth"
+	"alondra1/backend/internal/cloudsync"
 	"alondra1/backend/internal/settings"
 	"alondra1/backend/internal/tasks"
 	"alondra1/backend/internal/tenancy"
@@ -32,6 +33,7 @@ type Server struct {
 	Tenancy           *tenancy.Service
 	Tasks             *tasks.Service
 	Settings          *settings.Service
+	Sync              *cloudsync.Service
 	Ready             func(context.Context) error
 	Log               *slog.Logger
 	TrustProxyHeaders bool
@@ -51,6 +53,7 @@ func (s *Server) Handler() http.Handler {
 	r.handle("GET", "/v1/me", s.authenticated(s.me))
 	s.tenancyRoutes(r)
 	s.taskRoutes(r)
+	s.syncRoutes(r)
 	r.mux.HandleFunc("/", r.unmatched)
 	return s.middleware(r.mux)
 }

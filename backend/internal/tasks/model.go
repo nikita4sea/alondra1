@@ -391,6 +391,36 @@ func MergePatch(target json.RawMessage, patch json.RawMessage) (json.RawMessage,
 	return json.Marshal(merge(base, changes))
 }
 
+// ComposePatch combines two merge patches into one that has the effect of applying first, then second. Unlike
+// MergePatch, a null in second is kept (it is an instruction to remove the field), so coalescing offline edits such as
+// {"title": "x"} then {"myDayDate": null} still removes myDayDate on the server.
+func ComposePatch(first, second json.RawMessage) (json.RawMessage, error) {
+	var a, b map[string]any
+	if err := json.Unmarshal(first, &a); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(second, &b); err != nil || b == nil {
+		return nil, &ValidationError{Problems: []string{"changes must be a JSON object"}}
+	}
+	return json.Marshal(compose(a, b))
+}
+
+func compose(a, b map[string]any) map[string]any {
+	if a == nil {
+		a = map[string]any{}
+	}
+	for key, value := range b {
+		if next, ok := value.(map[string]any); ok {
+			if existing, ok := a[key].(map[string]any); ok {
+				a[key] = compose(existing, next)
+				continue
+			}
+		}
+		a[key] = value // including nil: "remove" survives composition
+	}
+	return a
+}
+
 func merge(base map[string]any, changes map[string]any) map[string]any {
 	if base == nil {
 		base = map[string]any{}
