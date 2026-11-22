@@ -97,7 +97,7 @@ public sealed class SyncCoordinator
         var result = await _mail.SendAsync(account, secrets, mail, cancellationToken).ConfigureAwait(false);
         if (result.Acceptance == SmtpAcceptance.Accepted)
         {
-            _cache.Upsert(LocalCopy(account, mail, "Sent", ItemAvailability.Downloaded, localOnly: account.Incoming.Protocol == MailProtocol.Pop3, result.Acceptance));
+            _cache.Upsert(LocalCopy(account, mail, SpecialFolders.Resolve(account, "Sent"), ItemAvailability.Downloaded, localOnly: account.Incoming.Protocol == MailProtocol.Pop3, result.Acceptance));
         }
         else if (result.Acceptance == SmtpAcceptance.Uncertain)
         {
@@ -270,7 +270,7 @@ public sealed class SyncCoordinator
             _cache.SetMessages(account.Id, folder.Id, batch.Upserts);
         }
 
-        return SyncReport.Done("Online view refreshed.");
+        return new SyncReport { Ok = true, Detail = "Online view refreshed.", Folders = folders };
     }
 
     private async Task<SyncReport> SyncPersonalAsync(AccountConfig account, SecretBundle secrets, CancellationToken cancellationToken)
@@ -348,7 +348,7 @@ public sealed class SyncCoordinator
         await RecoverSubmittingAsync(account, cancellationToken).ConfigureAwait(false);
         await DrainSendsAsync(account, cancellationToken).ConfigureAwait(false);
         var detail = degraded ? Pop3Policy.DegradedDedupNotice : "Saved mail is up to date.";
-        return new SyncReport { Ok = true, Detail = detail, DegradedDedup = degraded };
+        return new SyncReport { Ok = true, Detail = detail, DegradedDedup = degraded, Folders = folders };
     }
 
     private async Task DownloadBodiesAsync(AccountConfig account, SecretBundle secrets, RemoteFolder folder, IReadOnlyList<StoredMessage> messages, CancellationToken cancellationToken)
@@ -427,7 +427,7 @@ public sealed class SyncCoordinator
                 op.UpdatedUtc = _clock.UtcNow;
                 var done = new PersonalBatch();
                 done.Operations.Add(op);
-                var sent = LocalCopy(account, mail, result.Acceptance == SmtpAcceptance.Accepted ? "Sent" : "Outbox",
+                var sent = LocalCopy(account, mail, result.Acceptance == SmtpAcceptance.Accepted ? SpecialFolders.Resolve(account, "Sent") : "Outbox",
                     result.Acceptance == SmtpAcceptance.Accepted ? ItemAvailability.Downloaded : ItemAvailability.Pending,
                     localOnly: account.Incoming.Protocol == MailProtocol.Pop3 || result.Acceptance != SmtpAcceptance.Accepted,
                     result.Acceptance);

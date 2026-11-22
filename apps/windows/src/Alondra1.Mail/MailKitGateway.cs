@@ -384,7 +384,8 @@ public sealed class MailKitGateway : IMailGateway
             var fromName = string.IsNullOrWhiteSpace(sender?.Name) ? fromAddress : sender.Name;
             var subject = headers[HeaderId.Subject] ?? "";
             var date = headers[HeaderId.Date];
-            var received = DateTimeOffset.TryParse(date, out var parsed) ? parsed : DateTimeOffset.UtcNow;
+            // RFC 5322 dates ("Sun, 22 Nov 2026 13:20:00 +0000 (UTC)") need MimeKit's parser; DateTimeOffset.TryParse rejects most of them.
+            var received = date is not null && MimeKit.Utils.DateUtils.TryParse(date, out var parsed) ? parsed : DateTimeOffset.UtcNow;
             batch.Upserts.Add(new StoredMessage
             {
                 AccountId = account.Id,

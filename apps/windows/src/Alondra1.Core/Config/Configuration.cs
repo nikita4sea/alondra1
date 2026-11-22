@@ -63,7 +63,8 @@ public sealed class AppearanceSettings
     public Density Density { get; set; } = Density.Compact;
     public Dictionary<string, string> LightColors { get; set; } = [];
     public Dictionary<string, string> DarkColors { get; set; } = [];
-    public bool GroupMailByAccount { get; set; }
+    /// <summary>All-accounts mail view lists each account as its own group (default) or mixes them together.</summary>
+    public bool GroupMailByAccount { get; set; } = true;
     public bool GroupTasksByFolder { get; set; }
     public BackgroundSettings Background { get; set; } = new();
 }
@@ -273,6 +274,8 @@ public sealed class SyncPreferences
 
 public sealed class FolderMap
 {
+    /// <summary>The server's inbox id (IMAP "INBOX"); null until the first sync. POP3 always uses "Inbox".</summary>
+    public string? Inbox { get; set; }
     public string? Sent { get; set; }
     public string? Drafts { get; set; }
     public string? Trash { get; set; }

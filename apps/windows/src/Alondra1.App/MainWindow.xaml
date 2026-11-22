@@ -136,18 +136,21 @@
       <!-- Toolbar groups: account | 16 | status | 8 · divider · 8 | folder tabs (8 px between tabs). Every surface is 36 px on one center line. -->
       <Border x:Name="Toolbar" Grid.Row="2" Style="{StaticResource Toolbar}" Margin="{StaticResource ShellToolbarMargin}">
         <DockPanel VerticalAlignment="Center" LastChildFill="True">
-          <!-- Account selector with connection status (Mail, Calendar, Notes, Contacts). -->
+          <!-- Sync button carrying the connection status (Mail, Calendar, Notes, Contacts), then the account selector
+               (Calendar, Notes, Contacts; Mail picks its account in View settings). -->
           <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Visibility="{Binding HasAccountSelector, Converter={StaticResource BoolVis}}">
-            <ComboBox x:Name="AccountBox" Style="{StaticResource ToolbarSelector}" Height="{StaticResource ControlMd}" VerticalAlignment="Center" AutomationProperties.Name="Account" ToolTip="Account" SelectionChanged="AccountBox_SelectionChanged"/>
-            <Border x:Name="StatusChip" Style="{StaticResource StatusChip}" Margin="{StaticResource ToolbarGroupGapLeft}"
-                    ToolTip="{Binding StatusText}" AutomationProperties.Name="{Binding ConnectionAccessName}" AutomationProperties.LiveSetting="Polite" Focusable="True"
-                    FocusVisualStyle="{StaticResource FocusRing}">
+            <Button x:Name="SyncButton" Style="{StaticResource SyncButton}" Command="{Binding SyncCommand}"
+                    ToolTip="{Binding SyncToolTip}" AutomationProperties.Name="{Binding SyncAccessName}" AutomationProperties.LiveSetting="Polite">
               <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Ellipse x:Name="StatusDot" Width="8" Height="8" Fill="{DynamicResource SuccessBrush}" VerticalAlignment="Center"/>
+                <ui:Alondra1Icon Kind="Refresh" IconSize="16" VerticalAlignment="Center"/>
+                <Ellipse x:Name="StatusDot" Width="8" Height="8" Fill="{DynamicResource SuccessBrush}" VerticalAlignment="Center" Margin="{StaticResource PaneControlGapLeft}"/>
                 <TextBlock Text="{Binding ConnectionLabel}" FontSize="12" Foreground="{DynamicResource MutedBrush}" Margin="{StaticResource PaneControlGapLeft}" VerticalAlignment="Center"
                            Visibility="{Binding ShowStatusLabel, Converter={StaticResource BoolVis}}"/>
               </StackPanel>
-            </Border>
+            </Button>
+            <ComboBox x:Name="AccountBox" Style="{StaticResource ToolbarSelector}" Height="{StaticResource ControlMd}" VerticalAlignment="Center" Margin="{StaticResource ToolbarGroupGapLeft}"
+                      AutomationProperties.Name="Account" ToolTip="Account" SelectionChanged="AccountBox_SelectionChanged"
+                      Visibility="{Binding ShowToolbarAccountSelector, Converter={StaticResource BoolVis}}"/>
             <Border Style="{StaticResource ToolbarDivider}"/>
           </StackPanel>
 
@@ -184,25 +187,36 @@
                 <ui:Alondra1Icon Kind="{Binding ReadToggleIcon}" IconSize="18"/>
               </Button>
               <Border Style="{StaticResource ToolbarDivider}"/>
-              <ToggleButton x:Name="LayoutButton" Style="{StaticResource IconButton}" AutomationProperties.Name="Layout" ToolTip="Layout and density">
+              <ToggleButton x:Name="LayoutButton" Style="{StaticResource IconButton}" AutomationProperties.Name="View settings" ToolTip="View settings">
                 <ui:Alondra1Icon Kind="Layout" IconSize="18"/>
               </ToggleButton>
               <Popup IsOpen="{Binding IsChecked, ElementName=LayoutButton}" PlacementTarget="{Binding ElementName=LayoutButton}"
-                     Placement="Bottom" HorizontalOffset="-190" VerticalOffset="4" StaysOpen="False" AllowsTransparency="True">
+                     Placement="Bottom" HorizontalOffset="-230" VerticalOffset="4" StaysOpen="False" AllowsTransparency="True">
                 <Border Margin="0,0,12,12" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1"
-                        CornerRadius="{StaticResource RadiusLg}" Padding="12" Width="240" Effect="{StaticResource PopupShadow}">
+                        CornerRadius="{StaticResource RadiusLg}" Padding="12" Width="280" Effect="{StaticResource PopupShadow}">
                   <StackPanel>
                     <DockPanel Margin="0,0,0,8">
+                      <TextBlock Text="Account" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                      <ComboBox x:Name="ViewAccountBox" Width="150" HorizontalAlignment="Right" SelectionChanged="ViewAccountBox_SelectionChanged" AutomationProperties.Name="Account in view"/>
+                    </DockPanel>
+                    <DockPanel Margin="0,0,0,8" IsEnabled="{Binding IsAllAccounts}">
+                      <TextBlock Text="Group" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
+                      <ComboBox x:Name="MailGrouping" Width="150" HorizontalAlignment="Right" SelectionChanged="MailGrouping_Changed" AutomationProperties.Name="Group messages">
+                        <ComboBoxItem Content="Together"/><ComboBoxItem Content="By account"/>
+                      </ComboBox>
+                    </DockPanel>
+                    <Border Height="1" Background="{DynamicResource LineBrush}" Margin="0,0,0,8"/>
+                    <DockPanel Margin="0,0,0,8">
                       <TextBlock Text="Folders" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
-                      <ComboBox x:Name="FolderDockBox" Width="120" HorizontalAlignment="Right" SelectionChanged="FolderDockBox_SelectionChanged" AutomationProperties.Name="Folders position"/>
+                      <ComboBox x:Name="FolderDockBox" Width="150" HorizontalAlignment="Right" SelectionChanged="FolderDockBox_SelectionChanged" AutomationProperties.Name="Folders position"/>
                     </DockPanel>
                     <DockPanel Margin="0,0,0,8">
                       <TextBlock Text="Reading pane" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
-                      <ComboBox x:Name="ReaderDockBox" Width="120" HorizontalAlignment="Right" SelectionChanged="ReaderDockBox_SelectionChanged" AutomationProperties.Name="Reading pane position"/>
+                      <ComboBox x:Name="ReaderDockBox" Width="150" HorizontalAlignment="Right" SelectionChanged="ReaderDockBox_SelectionChanged" AutomationProperties.Name="Reading pane position"/>
                     </DockPanel>
                     <DockPanel>
                       <TextBlock Text="Density" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}"/>
-                      <ComboBox x:Name="DensityBox" Width="120" HorizontalAlignment="Right" SelectionChanged="DensityBox_SelectionChanged" AutomationProperties.Name="Density"/>
+                      <ComboBox x:Name="DensityBox" Width="150" HorizontalAlignment="Right" SelectionChanged="DensityBox_SelectionChanged" AutomationProperties.Name="Density"/>
                     </DockPanel>
                     <TextBlock Text="“Top” shows folders in this toolbar." FontSize="11" Foreground="{DynamicResource MutedBrush}" Margin="0,8,0,0" TextWrapping="Wrap"/>
                   </StackPanel>
@@ -324,10 +338,6 @@
                           Visibility="{Binding ShowFolderCombo, Converter={StaticResource BoolVis}}"
                           SelectionChanged="HiddenFolderBox_SelectionChanged"/>
                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-                  <ComboBox x:Name="MailGrouping" AutomationProperties.Name="Mail view" Height="{StaticResource ControlMd}" VerticalAlignment="Center"
-                            Margin="{StaticResource ToolbarItemGapRight}" SelectionChanged="MailGrouping_Changed">
-                    <ComboBoxItem Content="Together"/><ComboBoxItem Content="By account"/>
-                  </ComboBox>
                   <TextBlock Text="{Binding VisibleCountText}" FontSize="11" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center"/>
                 </StackPanel>
               </Grid>

@@ -741,13 +741,12 @@
     </Style.Triggers>
   </Style>
 
-  <!-- Status chip in the toolbar: same 36 px surface as the account selector and folder tabs. -->
-  <Style x:Key="StatusChip" TargetType="Border">
+  <!-- Sync button in the toolbar: the status chip's 36 px surface, pressable, with icon, status dot, and label. -->
+  <Style x:Key="SyncButton" TargetType="Button" BasedOn="{StaticResource QuietButton}">
     <Setter Property="Height" Value="{StaticResource ControlMd}"/>
+    <Setter Property="MinHeight" Value="0"/>
     <Setter Property="Padding" Value="12,0"/>
-    <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
     <Setter Property="Background" Value="{DynamicResource SubtleBrush}"/>
-    <Setter Property="VerticalAlignment" Value="Center"/>
   </Style>
 
   <!-- The single module toolbar row under the header. -->

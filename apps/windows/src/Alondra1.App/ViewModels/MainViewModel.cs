@@ -16,7 +16,6 @@ namespace Alondra1.App.ViewModels;
 public sealed partial class MainViewModel : ObservableObject
 {
     private readonly AppServices _services;
-    private readonly Dictionary<string, string> _folderIds = new(StringComparer.OrdinalIgnoreCase);
     private List<CalendarEntry> _events = [];
     private List<NoteEntry> _notes = [];
     private List<ContactEntry> _contacts = [];
@@ -43,6 +42,7 @@ public sealed partial class MainViewModel : ObservableObject
         DeleteCommand = new RelayCommand(async () => await DeleteAsync(), () => SelectedMessage is not null);
         ArchiveCommand = new RelayCommand(async () => await MoveSpecialAsync("Archive"), () => SelectedMessage is not null);
         ToggleReadCommand = new RelayCommand(async () => await ToggleReadAsync(), () => SelectedMessage is not null);
+        // Always enabled so the button keeps showing its status while a sync runs; SyncAsync ignores a second press.
         SyncCommand = new RelayCommand(async () => await SyncAsync());
         PreviousMonthCommand = new RelayCommand(() => ShiftMonth(-1));
         NextMonthCommand = new RelayCommand(() => ShiftMonth(1));
@@ -101,6 +101,8 @@ public sealed partial class MainViewModel : ObservableObject
     public string StatusText { get; private set; } = "";
     public string SearchText { get; set; } = "";
     public string SelectedAccount { get; private set; } = "All accounts";
+    /// <summary>Grouping by account only applies when every account is in view.</summary>
+    public bool IsAllAccounts => SelectedAccount == "All accounts";
     public string SelectedFolder { get; private set; } = "Inbox";
     public bool FoldersHidden => FoldersDock == DockEdge.Hidden;
     public bool FoldersAreBand => FoldersDock is DockEdge.Top or DockEdge.Bottom;
@@ -151,6 +153,12 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Mail, Calendar, Notes, and Contacts are filtered by account; local To-do and Chat are not.</summary>
     public bool HasAccountSelector => IsMail || IsCalendar || IsNotes || IsContacts;
+    /// <summary>Mail chooses its account in the view settings; the other workspaces keep the toolbar selector.</summary>
+    public bool ShowToolbarAccountSelector => IsCalendar || IsNotes || IsContacts;
+    public bool HasSyncButton => HasAccountSelector;
+    public bool IsSyncing { get; private set; }
+    public string SyncToolTip => (IsSyncing ? "Syncing…" : "Sync now (F5)") + (string.IsNullOrWhiteSpace(StatusText) ? "" : "\n" + StatusText);
+    public string SyncAccessName => $"Sync now. Status: {ConnectionLabel}. {StatusText}";
 
     /// <summary>With folders docked on top, they appear as tabs in the module toolbar instead of a separate pane.</summary>
     public bool ShowToolbarFolders => FoldersDock == DockEdge.Top;
@@ -180,8 +188,6 @@ public sealed partial class MainViewModel : ObservableObject
         ConnectionState.Error => "DangerBrush",
         _ => "MutedBrush",
     };
-
-    public string ConnectionAccessName => $"Connection: {ConnectionLabel}. {StatusText}";
 
     // ---------- Responsive header and toolbar (never wraps into another row) ----------
 
@@ -273,6 +279,7 @@ public sealed partial class MainViewModel : ObservableObject
         SelectedAccount = string.IsNullOrWhiteSpace(account) ? "All accounts" : account;
         _ = ReloadMessagesAsync();
         OnPropertyChanged(nameof(SelectedAccount));
+        OnPropertyChanged(nameof(IsAllAccounts));
     }
 
     public void SetFolder(string? folder)
@@ -376,19 +383,55 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        UpdateStatus("Syncing…", ConnectionState.Syncing);
-        foreach (var account in _services.Config.Accounts.ToList())
+        if (IsSyncing)
+            return;
+        IsSyncing = true;
+        OnPropertyChanged(nameof(IsSyncing));
+        SyncCommand.NotifyCanExecuteChanged();
+        try
         {
-            // The account may have been deleted while an earlier account was syncing.
-            if (!_services.Config.Accounts.Contains(account))
-                continue;
-            var report = await _services.Sync.SyncAsync(account, CancellationToken.None).ConfigureAwait(true);
-            UpdateStatus(report.Detail, report.Ok ? ConnectionState.Ready : report.Offline ? ConnectionState.Offline : ConnectionState.Error);
-            if (report.DegradedDedup)
-                Dialogs.Alert(report.Detail, "Alondra1", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
+            UpdateStatus("Syncing…", ConnectionState.Syncing, summary: true);
+            // Every account is synced and reported: one failing account is never hidden behind another's success.
+            var failures = new List<string>();
+            var allOffline = true;
+            var synced = 0;
+            foreach (var account in _services.Config.Accounts.ToList())
+            {
+                // The account may have been deleted while an earlier account was syncing.
+                if (!_services.Config.Accounts.Contains(account))
+                    continue;
+                UpdateStatus($"Syncing {account.DisplayName}…", ConnectionState.Syncing, summary: true);
+                var report = await _services.Sync.SyncAsync(account, CancellationToken.None).ConfigureAwait(true);
+                if (report.Ok)
+                {
+                    synced++;
+                    // Remember where this server keeps Inbox, Sent, Drafts, Archive, and Trash (for example "INBOX.INBOX.Sent").
+                    if (SpecialFolders.Learn(account, report.Folders))
+                        SaveConfig();
+                }
+                else
+                {
+                    failures.Add($"{account.DisplayName}: {report.Detail}");
+                    allOffline &= report.Offline;
+                }
 
-        await ReloadMessagesAsync().ConfigureAwait(true);
+                if (report.DegradedDedup)
+                    Dialogs.Alert(report.Detail, "Alondra1", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+
+            if (failures.Count == 0)
+                UpdateStatus(synced == 1 ? "1 account up to date" : $"{synced} accounts up to date", ConnectionState.Ready, summary: true);
+            else
+                UpdateStatus(string.Join("\n", failures), allOffline ? ConnectionState.Offline : ConnectionState.Error, summary: true);
+            await ReloadMessagesAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            IsSyncing = false;
+            OnPropertyChanged(nameof(IsSyncing));
+            OnPropertyChanged(nameof(SyncToolTip));
+            SyncCommand.NotifyCanExecuteChanged();
+        }
     }
 
     public void UpsertAccount(AccountConfig account, string? password)
@@ -887,6 +930,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         SelectedAccount = "All accounts";
         OnPropertyChanged(nameof(SelectedAccount));
+        OnPropertyChanged(nameof(IsAllAccounts));
         OnPropertyChanged(nameof(IsDemo));
         OnPropertyChanged(nameof(DemoBadge));
     }
@@ -915,8 +959,7 @@ public sealed partial class MainViewModel : ObservableObject
             ?? _services.Config.Accounts.FirstOrDefault(account => account.Kind != AccountKind.Manual);
     }
 
-    private string ResolveFolder(AccountConfig account, string display) =>
-        _folderIds.TryGetValue(account.Id + "|" + display, out var id) ? id : display;
+    private static string ResolveFolder(AccountConfig account, string display) => SpecialFolders.Resolve(account, display);
 
     private OutgoingMail? BuildReply(bool all)
     {
@@ -944,7 +987,7 @@ public sealed partial class MainViewModel : ObservableObject
         };
     }
 
-    private void UpdateStatus(string detail, ConnectionState? state = null)
+    private void UpdateStatus(string detail, ConnectionState? state = null, bool summary = false)
     {
         if (IsDemo)
         {
@@ -959,7 +1002,8 @@ public sealed partial class MainViewModel : ObservableObject
         else
         {
             var account = AccountsInView().FirstOrDefault() ?? _services.Config.Accounts[0];
-            StatusText = $"{account.DisplayName} · {account.Mode} · {detail}";
+            // A summary covers every account; other messages are about the account in view.
+            StatusText = summary ? detail : $"{account.DisplayName} · {account.Mode} · {detail}";
             Connection = state ?? (Connection is ConnectionState.Sample or ConnectionState.NoAccounts ? ConnectionState.Ready : Connection);
         }
 
@@ -967,7 +1011,8 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(Connection));
         OnPropertyChanged(nameof(ConnectionLabel));
         OnPropertyChanged(nameof(ConnectionBrushKey));
-        OnPropertyChanged(nameof(ConnectionAccessName));
+        OnPropertyChanged(nameof(SyncToolTip));
+        OnPropertyChanged(nameof(SyncAccessName));
         ConnectionChanged?.Invoke();
     }
 
@@ -1001,6 +1046,8 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowSearchButton));
         OnPropertyChanged(nameof(SearchPlaceholder));
         OnPropertyChanged(nameof(HasAccountSelector));
+        OnPropertyChanged(nameof(ShowToolbarAccountSelector));
+        OnPropertyChanged(nameof(HasSyncButton));
         OnPropertyChanged(nameof(CurrentWorkspace));
         OnPropertyChanged(nameof(IsDemo));
         OnPropertyChanged(nameof(DemoBadge));
@@ -1059,11 +1106,6 @@ public sealed partial class MainViewModel : ObservableObject
         return result;
     }
 
-    public void RememberFolders(string accountId, IEnumerable<(string Display, string Id)> folders)
-    {
-        foreach (var (display, id) in folders)
-            _folderIds[accountId + "|" + display] = id;
-    }
 }
 
 public sealed class WorkspaceChoice : ObservableObject

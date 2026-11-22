@@ -92,6 +92,8 @@ public sealed class SyncReport
     public bool Blocked { get; init; }
     public string Detail { get; init; } = "";
     public bool DegradedDedup { get; init; }
+    /// <summary>The server's folders seen by this sync (empty when the sync did not reach the server).</summary>
+    public IReadOnlyList<Alondra1.Core.Mail.RemoteFolder> Folders { get; init; } = [];
 
     public static SyncReport Done(string detail) => new() { Ok = true, Detail = detail };
     public static SyncReport Failed(string detail, bool offline = false) => new() { Detail = detail, Offline = offline };

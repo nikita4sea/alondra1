@@ -19,9 +19,9 @@ Screenshots are produced by the app itself: `Alondra1.exe --demo --snapshot=<fil
 | Row | Height | Contents |
 | --- | --- | --- |
 | Application header | 56 px | Logo and “Alondra1” wordmark · workspace tabs: Mail, Calendar, To-do, Notes, Contacts, Chat (Soon) · contextual search · Settings · window buttons |
-| Module toolbar | 48 px | Mail: account selector with connection status, folder tabs, New / Reply / Reply all / Forward / Archive / Delete / Mark read or unread, Layout, More. Calendar: month navigation. To-do: sort, filter, important, undo, More. Notes: note selector, New note. Contacts: count. Chat: “Coming later”. |
+| Module toolbar | 48 px | Mail: Sync button with connection status, folder tabs, New / Reply / Reply all / Forward / Archive / Delete / Mark read or unread, View settings, More. Calendar: Sync button, account selector, month navigation. To-do: sort, filter, important, undo, More. Notes: note selector, New note. Contacts: count. Chat: “Coming later”. |
 
-The old module-navigation row, the “Mail” title, and the account/status text row are gone. Connection status (Up to date, Syncing…, Offline, Sync failed, Sample data, No accounts) is a colored dot with a label beside the account selector; the full text (account · mode · detail) is its tooltip and accessible name. Due task reminders float over the content as cards instead of occupying a row.
+The old module-navigation row, the “Mail” title, and the account/status text row are gone. Connection status (Up to date, Syncing…, Offline, Sync failed, Sample data, No accounts) is a colored dot with a label inside the Sync button at the start of the toolbar (Mail, Calendar, Notes, Contacts); pressing it syncs every account (F5), and the full text (per account, or the sync summary) is its tooltip and accessible name. Mail chooses its account and grouping (By account, the default, or Together) in View settings, together with folder and reading-pane position and density; Calendar, Notes, and Contacts keep the account selector after the Sync button. Due task reminders float over the content as cards instead of occupying a row.
 
 **Search** is one box whose meaning follows the module: “Search mail”, “Search tasks”, “Search contacts”. Calendar, Notes, and Chat have no search function, so the box is hidden there rather than offering a search that does nothing. Ctrl+E (or Ctrl+F) focuses it; Esc clears it.
 
@@ -40,9 +40,9 @@ One set of tokens in `Themes/Controls.xaml` governs the shell, the toolbar, and 
 | `PaneSectionGap` | 12 | pane header row → next region (column row, subject or “No message selected”) |
 | `MailTableHeaderHeight` | 32 | From / Subject / Received row |
 | `PaneControlGap` | 8 | between controls in one row |
-| `ToolbarGroupGap` | 16 | account selector → status chip; status → folders is 8 + divider + 8 |
+| `ToolbarGroupGap` | 16 | Sync button → account selector; sync/selector → module content is 8 + divider + 8 |
 | `ToolbarItemGapRight` | 8 | between folder tabs and other controls inside a toolbar group |
-| `ControlMd` | 36 | account selector, status chip, and folder tabs: one height, one center line |
+| `ControlMd` | 36 | Sync button, account selector, and folder tabs: one height, one center line |
 
 The shell grid is header 56 · 8 · toolbar 48 · 8 · content. In Mail, `LayoutArranger.Gutter` (8) reserves exactly one gutter between each adjacent pair of panes in all 25 dock combinations; the splitter's hit target is that gutter, so resizing never adds or removes spacing.
 

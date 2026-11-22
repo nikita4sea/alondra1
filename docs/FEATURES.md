@@ -24,7 +24,8 @@ What Alondra1 1.3.0 does today, by workspace. Each workspace has a keyboard shor
 
 **Reading**
 
-- An "All accounts" view, with messages shown *Together* or *By account*, or one account at a time.
+- An "All accounts" view, grouped *By account* (default) or shown *Together*, or one account at a time; both choices are in Mail's View settings.
+- A Sync button (F5) in the toolbar that also shows the connection status: a colored dot, a label on wide windows, and the details of every account in its tooltip.
 - Inbox, Sent, Drafts, Archive, and Trash as toolbar tabs (Ctrl+Shift+1 … 5).
 - A compact list with unread marks and an attachment indicator, plus a reading pane showing sender, account, and time.
 - Message bodies are shown as clean plain text. Scripts and remote content are never loaded.

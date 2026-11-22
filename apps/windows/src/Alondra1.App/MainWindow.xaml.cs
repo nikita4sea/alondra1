@@ -104,6 +104,8 @@ public partial class MainWindow : Window
         _filling = true;
         AccountBox.ItemsSource = _model.AccountChoices;
         AccountBox.SelectedItem = _model.SelectedAccount;
+        ViewAccountBox.ItemsSource = _model.AccountChoices;
+        ViewAccountBox.SelectedItem = _model.SelectedAccount;
         HiddenFolderBox.ItemsSource = _model.Folders;
         SyncFolderSelectors(_model.SelectedFolder);
         NoteBox.ItemsSource = _model.NoteTitles;
@@ -410,11 +412,19 @@ public partial class MainWindow : Window
 
     // ---------- Accounts and folders ----------
 
-    private void AccountBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void AccountBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ChooseAccount(AccountBox.SelectedItem);
+    private void ViewAccountBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => ChooseAccount(ViewAccountBox.SelectedItem);
+
+    /// <summary>The toolbar selector (Calendar, Notes, Contacts) and Mail's View settings choose the same account.</summary>
+    private void ChooseAccount(object? selected)
     {
-        if (_filling || AccountBox.SelectedItem is not string account)
+        if (_filling || selected is not string account)
             return;
         _model.SetAccount(account);
+        _filling = true;
+        AccountBox.SelectedItem = account;
+        ViewAccountBox.SelectedItem = account;
+        _filling = false;
         MessageList.SelectedItem = _model.SelectedMessage;
         UpdateStatusDot();
     }

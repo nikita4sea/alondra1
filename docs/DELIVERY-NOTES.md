@@ -11,6 +11,14 @@ This is the release history, with what was verified for each release and what wa
 
 **Test machine:** one PC running Windows build 10.0.26300 (DisplayVersion 26H2). That is the only OS any release was launched on.
 
+## Unreleased: IMAP messages, sync button, mail view settings (2026-11-22)
+
+- **IMAP accounts showed no messages.** Sync stored messages under the server's folder ids (`INBOX`, `INBOX.INBOX.Sent`), but the list asked for the displayed names (`Inbox`, `Sent`), and the mapping between them was never filled. The new `SpecialFolders` class maps displayed folders to real ids, learned from the folder list of each sync (the special-use flag first, then the name) and saved to the account's folder map. Copies of sent mail go to the same learned folder.
+- **POP3 received times** were the time of the sync: `DateTimeOffset.TryParse` rejects most RFC 5322 dates. They are now parsed with MimeKit.
+- **Sync button:** the status chip became a button (refresh icon, status dot, label on wide windows) that syncs every account, the same as F5. Every account is synced even when one fails. The tooltip lists each failure, or "N accounts up to date".
+- **View settings:** Mail's Layout popup is now View settings, with Account (All accounts or one) and Group (By account or Together) above folder position, reading pane, and density. The toolbar account selector stays for Calendar, Notes, and Contacts. Grouping by account is the default for new configurations.
+- Verified with the two live test accounts: `LiveMailTests` (5) pass; `Alondra1.exe --sync --open=Mail` lists 60 messages from both accounts, grouped by account, with the learned folder map `INBOX` / `INBOX.INBOX.Sent` / `INBOX.INBOX.Drafts` / `INBOX.INBOX.Trash`.
+
 ## Unreleased: cloud backend, Milestone F: operational readiness (2026-11-22)
 
 Everything stays on Docker Compose, as the spec requires; host provisioning, DNS, and the firewall remain the operator's job ([production runbook](runbooks/production.md)).
