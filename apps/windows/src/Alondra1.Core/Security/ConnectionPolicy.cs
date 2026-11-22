@@ -47,6 +47,10 @@ public static class ConnectionPolicy
         if (ConfigWorkflow.UsesPlaintext(account) && secrets?.Google?.AccessToken is not null)
             return new ConnectionDecision(false, "A saved Google token cannot be used on an unencrypted server.");
 
+        // A port/security contradiction would only time out; say what to change instead of trying.
+        if (PortAdvisor.IncomingProblem(account.Incoming) is { } incomingProblem)
+            return new ConnectionDecision(false, incomingProblem);
+
         if (account.Incoming.Authentication == AuthenticationKind.Password && string.IsNullOrEmpty(secrets?.Password))
             return new ConnectionDecision(false, "Enter the password for this account.");
 

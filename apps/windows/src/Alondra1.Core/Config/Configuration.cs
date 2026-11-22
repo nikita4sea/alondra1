@@ -438,6 +438,10 @@ public static class ConfigWorkflow
 
             ValidateEndpoint(errors, account.DisplayName + " incoming", account.Incoming.Host, account.Incoming.Port);
             ValidateEndpoint(errors, account.DisplayName + " outgoing", account.Outgoing.Host, account.Outgoing.Port);
+            if (PortAdvisor.IncomingProblem(account.Incoming) is { } incomingProblem)
+                errors.Add($"{account.DisplayName}: {incomingProblem}");
+            if (PortAdvisor.OutgoingProblem(account.Outgoing) is { } outgoingProblem)
+                errors.Add($"{account.DisplayName}: {outgoingProblem}");
 
             if (account.Kind is AccountKind.Microsoft365 or AccountKind.Gmail)
             {

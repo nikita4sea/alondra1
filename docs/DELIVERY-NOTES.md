@@ -11,6 +11,32 @@ This is the release history, with what was verified for each release and what wa
 
 **Test machine:** one PC running Windows build 10.0.26300 (DisplayVersion 26H2). That is the only OS any release was launched on.
 
+## Unreleased: mail connection fixes (2026-11-22)
+
+Found with two real mailboxes on a provider that uses Implicit TLS everywhere (IMAP 993, POP3 995, SMTP 465) and keeps its special folders under `INBOX.` (for example `INBOX.INBOX.Sent`).
+
+- **Port and security mismatches** (the reported POP3 and SMTP sync errors):
+  - A manual account defaulted outgoing to 587 with STARTTLS, and switching incoming to POP3 kept the IMAP port 993. SMTP on 465 with STARTTLS timed out after 30 s with "The server could not be reached", and POP3 with STARTTLS on 995 hung for more than 60 s.
+  - New `PortAdvisor` rules: saving refuses a contradiction with the exact fix (for example "Outgoing SMTP port 465 uses Implicit TLS…").
+  - A saved contradiction fails at once (12 ms instead of a 30–60 s timeout) with the same message.
+  - The account dialog keeps port, protocol, and security consistent as you edit.
+- **Sent, Drafts, Trash, Archive** on servers with nested or differently named special folders:
+  - The configured name was opened by path, which throws when the folder does not exist, and the error was swallowed. Sent copies were silently not stored; saving drafts, deleting to Trash, and archiving failed.
+  - These folders are now found by exact path, then the server's special-use flag, then display name, and created only as a last resort.
+- **POP3 sender:** the list showed the raw `From` header (`Name <address>`). It now shows the display name and keeps the address, like IMAP.
+- **`--sync` switch:** syncs every account once at start-up, as F5 does (diagnostics).
+- **Verified:**
+  - Windows: 135 passed, 6 skipped (opt-in). New `PortAdvisorTests` cover the rules, saving, and connection refusal.
+  - `LiveMailTests` against the two real accounts: 5 passed. They covered:
+    - probes for IMAP, POP3, and SMTP;
+    - sending from account 1 to account 2 with the copy stored in `INBOX.INBOX.Sent`;
+    - sync over POP3 and IMAP in Online and Personal mode;
+    - a draft saved to `INBOX.INBOX.Drafts`;
+    - a deletion moved to `INBOX.INBOX.Trash`;
+    - mismatches refused at once.
+  - The real app, started with `--sync` against both accounts, showed "Up to date" and the merged inbox.
+  - Archive was not run against the live server.
+
 ## Unreleased: cloud backend, Milestone D (2026-11-22)
 
 - **Tasks in the cloud:**

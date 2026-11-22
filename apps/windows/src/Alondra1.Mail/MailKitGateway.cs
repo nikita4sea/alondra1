@@ -25,6 +25,8 @@ public sealed class MailKitGateway : IMailGateway
 
     public async Task<ProbeResult> ProbeOutgoingAsync(AccountConfig account, SecretBundle secrets, CancellationToken cancellationToken)
     {
+        if (PortAdvisor.OutgoingProblem(account.Outgoing) is { } problem)
+            return new ProbeResult(false, problem, FailureKind.Protocol);
         using var client = new SmtpClient { Timeout = 30000 };
         try
         {
@@ -227,8 +229,10 @@ public sealed class MailKitGateway : IMailGateway
                 break;
             case MailCommandKind.Archive:
             case MailCommandKind.Move:
-                var destinationName = command.DestinationFolderId ?? account.Folders.Archive ?? "Archive";
-                var destination = await client.GetFolderAsync(destinationName, cancellationToken).ConfigureAwait(false);
+                // An explicit destination is a real folder id from the folder list; Archive is resolved like Sent and Trash.
+                var destination = command.DestinationFolderId is { } destinationId
+                    ? await client.GetFolderAsync(destinationId, cancellationToken).ConfigureAwait(false)
+                    : await ResolveSpecialAsync(client, account.Folders.Archive, FolderAttributes.Archive, "Archive", cancellationToken).ConfigureAwait(false);
                 if (client.Capabilities.Contains(ImapCapability.Move))
                     await folder.MoveToAsync(uid, destination, cancellationToken).ConfigureAwait(false);
                 else
@@ -248,6 +252,9 @@ public sealed class MailKitGateway : IMailGateway
         var mime = BuildMime(mail);
         var messageId = MessageIdentity.Ensure(mail.MessageId);
         mime.MessageId = messageId.Trim('<', '>');
+        // Nothing was sent: a contradiction between port and security cannot connect, so do not try (and do not wait).
+        if (PortAdvisor.OutgoingProblem(account.Outgoing) is { } problem)
+            return new MailSendResult(SmtpAcceptance.Failed, messageId, problem, false);
         using var client = new SmtpClient { Timeout = 120000 };
         var started = false;
         try
@@ -370,7 +377,11 @@ public sealed class MailKitGateway : IMailGateway
             var headers = await client.GetMessageHeadersAsync(index, cancellationToken).ConfigureAwait(false);
             var uidl = uidls is not null && index < uidls.Count ? uidls[index] : null;
             var uid = uidl is null ? index + 1 : MessageIdentity.StableUid(account.Id + "|" + uidl);
-            var from = headers[HeaderId.From];
+            // The raw header is "Name <address>"; show the name and keep the address, as for IMAP.
+            var fromHeader = headers[HeaderId.From] ?? "";
+            var sender = InternetAddressList.TryParse(fromHeader, out var parsedFrom) ? parsedFrom.Mailboxes.FirstOrDefault() : null;
+            var fromAddress = sender?.Address ?? fromHeader;
+            var fromName = string.IsNullOrWhiteSpace(sender?.Name) ? fromAddress : sender.Name;
             var subject = headers[HeaderId.Subject] ?? "";
             var date = headers[HeaderId.Date];
             var received = DateTimeOffset.TryParse(date, out var parsed) ? parsed : DateTimeOffset.UtcNow;
@@ -382,8 +393,8 @@ public sealed class MailKitGateway : IMailGateway
                 Uid = uid,
                 MessageId = headers[HeaderId.MessageId],
                 Subject = subject,
-                FromName = from ?? "",
-                FromAddress = from ?? "",
+                FromName = fromName,
+                FromAddress = fromAddress,
                 ReceivedUtc = received,
                 TimeLabel = MailText.FormatTime(received, DateTimeOffset.Now),
                 IsUnread = true,
@@ -496,21 +507,23 @@ public sealed class MailKitGateway : IMailGateway
         }
     }
 
+    /// <summary>
+    /// Finds Sent, Drafts, or Trash. Servers name and nest these differently (for example "INBOX.INBOX.Sent"), so the
+    /// configured value is matched against the real folder list instead of being opened by path (MailKit's GetFolder
+    /// throws for a path that does not exist). Order: exact configured path, the server's special-use flag, a folder
+    /// whose display name matches, and only then a new folder.
+    /// </summary>
     private static async Task<IMailFolder> ResolveSpecialAsync(ImapClient client, string? configured, FolderAttributes attribute, string fallback, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(configured))
-        {
-            var named = client.GetFolder(configured);
-            if (named.Exists)
-                return named;
-        }
-
         var personal = client.PersonalNamespaces.Count > 0 ? client.PersonalNamespaces[0] : new FolderNamespace('/', "");
-        foreach (var folder in await client.GetFoldersAsync(personal, StatusItems.None, false, cancellationToken).ConfigureAwait(false))
-        {
-            if (folder.Attributes.HasFlag(attribute))
-                return folder;
-        }
+        var folders = await client.GetFoldersAsync(personal, StatusItems.None, false, cancellationToken).ConfigureAwait(false);
+        var wanted = string.IsNullOrWhiteSpace(configured) ? fallback : configured.Trim();
+        var match = folders.FirstOrDefault(folder => string.Equals(folder.FullName, wanted, StringComparison.OrdinalIgnoreCase))
+            ?? folders.FirstOrDefault(folder => folder.Attributes.HasFlag(attribute))
+            ?? folders.FirstOrDefault(folder => string.Equals(folder.Name, wanted, StringComparison.OrdinalIgnoreCase))
+            ?? folders.FirstOrDefault(folder => string.Equals(folder.Name, fallback, StringComparison.OrdinalIgnoreCase));
+        if (match is not null)
+            return match;
 
         var root = client.GetFolder(personal);
         return await root.CreateAsync(fallback, true, cancellationToken).ConfigureAwait(false);

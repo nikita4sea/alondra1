@@ -10,6 +10,7 @@ TestResults/
 
 # Docker Compose: local settings and runtime secrets never go to git.
 .env
+.test
 secrets/*
 !secrets/.gitkeep
 

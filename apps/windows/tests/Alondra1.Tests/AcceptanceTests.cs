@@ -86,6 +86,7 @@ public class AcceptanceTests
         var incomingAccount = Account(AccountMode.Online);
         incomingAccount.Id = "other-id";
         incomingAccount.Incoming.Security = TransportSecurity.None;
+        incomingAccount.Incoming.Port = 143; // plaintext IMAP port (993 is Implicit TLS only)
         incomingAccount.PlaintextConfirmed = true;
         var plan = ConfigWorkflow.Preview(current, new AppConfig { Accounts = [incomingAccount] });
         Assert.True(plan.Ok);
@@ -123,6 +124,7 @@ public class AcceptanceTests
     {
         var account = Account();
         account.Incoming.Security = TransportSecurity.None;
+        account.Incoming.Port = 143; // plaintext IMAP port (993 is Implicit TLS only)
         account.Incoming.Authentication = AuthenticationKind.OAuth;
         account.PlaintextConfirmed = true;
         var decision = ConnectionPolicy.Evaluate(account, new SecretBundle { Exchange = new OAuthToken { AccessToken = "token" } });

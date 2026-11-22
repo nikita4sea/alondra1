@@ -357,7 +357,13 @@ public static class Dialogs
         plaintext.Margin = new Thickness(0, 12, 0, 0);
         panel.Children.Add(plaintext);
         kind.SelectionChanged += (_, _) => ApplyKind();
-        protocol.SelectionChanged += (_, _) => ApplyKind();
+        protocol.SelectionChanged += (_, _) => { ApplyKind(); MatchIncomingPortToProtocol(); };
+        // Keep port and security consistent: a standard port selects its security, and a security change moves a
+        // standard port to the matching one (for example STARTTLS 587 <-> Implicit TLS 465).
+        inPort.TextChanged += (_, _) => MatchSecurityToPort(inPort, inSecurity);
+        outPort.TextChanged += (_, _) => MatchSecurityToPort(outPort, outSecurity);
+        inSecurity.SelectionChanged += (_, _) => MatchPortToSecurity(incoming: true);
+        outSecurity.SelectionChanged += (_, _) => MatchPortToSecurity(incoming: false);
         var actions = Footer(window);
         actions.Children.Add(Button("Test connection", async () =>
         {
@@ -402,6 +408,39 @@ public static class Dialogs
         if (existing is null)
             ApplyKind();
         window.ShowDialog();
+
+        void MatchIncomingPortToProtocol()
+        {
+            if (!Enum.TryParse<MailProtocol>(protocol.SelectedItem as string, out var selectedProtocol)
+                || !Enum.TryParse<TransportSecurity>(inSecurity.SelectedItem as string, out var security)
+                || !int.TryParse(inPort.Text, out var port) || !PortAdvisor.IsStandardIncomingPort(port))
+                return;
+            inPort.Text = PortAdvisor.DefaultIncomingPort(selectedProtocol, security).ToString();
+        }
+
+        void MatchSecurityToPort(TextBox portBox, ComboBox securityBox)
+        {
+            if (int.TryParse(portBox.Text, out var port) && PortAdvisor.SecurityFor(port) is { } expected
+                && (securityBox.SelectedItem as string) != expected.ToString()
+                && !((securityBox.SelectedItem as string) == TransportSecurity.None.ToString() && expected == TransportSecurity.RequiredStartTls))
+                securityBox.SelectedItem = expected.ToString();
+        }
+
+        void MatchPortToSecurity(bool incoming)
+        {
+            var portBox = incoming ? inPort : outPort;
+            var securityBox = incoming ? inSecurity : outSecurity;
+            if (!Enum.TryParse<TransportSecurity>(securityBox.SelectedItem as string, out var security) || !int.TryParse(portBox.Text, out var port))
+                return;
+            // Only a contradiction moves the port: 25 with STARTTLS or 143 with None stay as typed.
+            var expected = PortAdvisor.SecurityFor(port);
+            if (expected is null || expected == security || (security == TransportSecurity.None && expected == TransportSecurity.RequiredStartTls))
+                return;
+            if (incoming && PortAdvisor.IsStandardIncomingPort(port) && Enum.TryParse<MailProtocol>(protocol.SelectedItem as string, out var selectedProtocol))
+                portBox.Text = PortAdvisor.DefaultIncomingPort(selectedProtocol, security).ToString();
+            else if (!incoming && PortAdvisor.IsStandardOutgoingPort(port))
+                portBox.Text = PortAdvisor.DefaultOutgoingPort(security).ToString();
+        }
 
         void ApplyKind()
         {

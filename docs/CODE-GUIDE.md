@@ -162,6 +162,7 @@ Put decisions in a policy in `Sync/MailPolicies.cs` (pure and testable). Keep `M
 | `--home=<folder>` | Use another data folder instead of `%LOCALAPPDATA%\alondra1`. |
 | `--perf` | Seed 10,000 local messages and write timings to `perf.txt`. |
 | `--theme=light\|dark` | Force a theme (demo only). |
+| `--sync` | Sync every account once at start-up, as F5 does (diagnostics; combine with `--snapshot`). |
 | `--snapshot=<file.png>` | Render the window to a PNG after start-up. A `.txt` with measured heights is written next to it. |
 | `--open=<workspace>` | Open `Mail`, `Calendar`, `To-do`, `Notes`, `Contacts`, or `Chat`. |
 | `--width=<px>`, `--height=<px>` | Window size for a snapshot. |
@@ -173,7 +174,10 @@ Example: `Alondra1.exe --demo --open=To-do --theme=dark --snapshot=todo.png --ex
 
 ## Tests
 
-`dotnet test Alondra1.slnx` (from `apps/windows`) runs 104 tests. One test, the 10 GB mailbox, is skipped unless `ALONDRA1_SCALE_TEST_ROOT` names a scratch folder.
+`dotnet test Alondra1.slnx` (from `apps/windows`) runs 141 tests. Six are opt-in and skipped by default:
+
+- the 10 GB mailbox test runs when `ALONDRA1_SCALE_TEST_ROOT` names a scratch folder;
+- `LiveMailTests` (5) run against two real mailboxes when `ALONDRA1_LIVE_MAIL_FILE` names a local, git-ignored file with `USER1`, `PASSWORD1`, `USER2`, `PASSWORD2`, `IMAP`, `POP3`, and `SMTP` (`host:port`) lines. They probe all three protocols, send from account 1 to account 2, sync over POP3 and IMAP in Online and Personal mode, save a draft, delete to Trash, and check that a port/security mismatch fails at once with its fix. Credentials are read at run time and never written.
 
 | File | Covers |
 | --- | --- |

@@ -48,6 +48,13 @@ public partial class MainWindow : Window
             FillSelectors();
             UpdateStatusDot();
             WriteLaunchLog();
+            // Diagnostics: --sync syncs every account once at start (before a --snapshot), as F5 would.
+            if (App.Arguments.Contains("--sync") && !model.IsDemo)
+            {
+                await model.SyncAsync();
+                UpdateStatusDot();
+            }
+
             if (App.Arguments.Contains("--perf"))
                 await RunPerfAsync();
             else if (App.Arguments.FirstOrDefault(argument => argument.StartsWith("--snapshot=", StringComparison.Ordinal)) is { } snapshot)
