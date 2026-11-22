@@ -11,6 +11,40 @@ This is the release history, with what was verified for each release and what wa
 
 **Test machine:** one PC running Windows build 10.0.26300 (DisplayVersion 26H2). That is the only OS any release was launched on.
 
+## Unreleased: cloud backend, Milestone F: operational readiness (2026-11-22)
+
+Everything stays on Docker Compose, as the spec requires; host provisioning, DNS, and the firewall remain the operator's job ([production runbook](runbooks/production.md)).
+
+- **Retention job:** `internal/maintenance` enforces [ADR 0003](decisions/0003-retention.md).
+  - It purges the change log after 90 days, raising each space's cursor floor so stale clients get `410` and bootstrap again.
+  - It also purges receipts after 90 days, sign-in challenges after 1 day, sessions 7 days after expiry, space content 30 days after deletion (the tenant row stays as a tombstone), a removed member's data 30 days after removal unless they rejoin, closed invitations after 30 days, and audit entries after 1 year.
+  - It runs every 6 hours in the API, or once with `api maintenance`. An advisory lock lets only one instance run at a time. Migration `0005_maintenance`.
+- **Metrics:** a dependency-free Prometheus registry on an internal port (`:9090`, never published), covering requests and latency per route pattern, sign-in and refresh outcomes, push results, database health, maintenance runs, and backup freshness. Labels never carry ids, addresses, or tokens.
+- **Operations:**
+  - Zero-downtime token-key rotation: the previous key still verifies access tokens and sync cursors.
+  - Readiness returns `503` while draining on shutdown.
+  - Every response carries `X-Alondra1-API-Version`.
+  - `api healthcheck` lets the distroless image report its health; the version is set at build time.
+- **Deployment profiles:**
+  - `tls`: Caddy with automatic HTTPS and HSTS. It replaces `X-Forwarded-For` so clients cannot spoof their address, blocks `/metrics`, and keeps URIs out of its logs.
+  - `backup`: daily `pg_dump`, restore-checked into a scratch database, then encrypted with age to a public key only (the server cannot decrypt). It writes checksums, keeps 35 days, and records its status for the alerts. `restore.sh` refuses to overwrite the live database without an explicit confirmation.
+  - `monitoring`: Prometheus with alert rules for API down, database down, error rate, latency, sign-in email failures, sign-in abuse, refresh reuse, stale backups and restore checks, stale maintenance, and conflict spikes.
+- **Release pipeline:** `release.yml`, triggered by an `api-v*` tag.
+  - It runs every check, builds versioned images, and publishes them with provenance and an SBOM.
+  - Trivy fails the release on fixable high or critical vulnerabilities, and cosign signs the images keylessly by digest.
+  - Production then waits for a human approval and shows the digests to deploy.
+  - Runbooks: [production](runbooks/production.md), [backups and restores](runbooks/backup-restore.md), [monitoring](runbooks/monitoring.md), [release](runbooks/release.md).
+- **CI additions:**
+  - Compose validation with every profile, checking that the database and metrics ports are not published and that the API binds to localhost.
+  - Caddyfile validation, `promtool` checks of the Prometheus config and alert rules, and `shellcheck` of the backup scripts.
+  - Image builds for the API and the backup sidecar.
+  - A real backup → decrypt → restore round trip.
+- **Verified here:**
+  - Go unit tests (metrics format, key rotation for tokens and cursors, metrics, draining, and version over HTTP) and `go vet` pass.
+  - The retention job's integration tests pass on PostgreSQL 17: what is purged and what is kept, the cursor floor, a second pass finding nothing, and the single-instance lock.
+  - All earlier integration suites pass, and `govulncheck` finds no vulnerabilities.
+- **Not verified here:** Docker and the PostgreSQL client tools are not installed on this machine. The Caddy, backup, and Prometheus configurations, the backup round trip, and the release workflow run only in CI, and the release workflow has never run (it needs a tag, GHCR, and a configured `production` environment).
+
 ## Unreleased: cloud backend, Milestone E: sync (2026-11-22)
 
 - **Change log:**

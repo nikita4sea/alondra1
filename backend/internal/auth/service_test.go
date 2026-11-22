@@ -399,3 +399,27 @@ func TestRedactEmail(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestKeyRotationKeepsOldTokensValidUntilTheyExpire(t *testing.T) {
+	oldKey, newKey := []byte(strings.Repeat("a", 48)), []byte(strings.Repeat("b", 48))
+	now := time.Date(2026, 11, 22, 9, 0, 0, 0, time.UTC)
+	old, _ := auth.NewTokenSigner(oldKey)
+	token, _ := old.Issue("user", "session", now, 15*time.Minute)
+
+	rotated, _ := auth.NewTokenSigner(newKey)
+	if _, err := rotated.Verify(token, now); err == nil {
+		t.Fatal("without the previous key an old token must fail")
+	}
+	rotated.WithPrevious(oldKey)
+	if _, err := rotated.Verify(token, now); err != nil {
+		t.Fatalf("the previous key must still verify: %v", err)
+	}
+	fresh, _ := rotated.Issue("user", "session", now, 15*time.Minute)
+	if _, err := old.Verify(fresh, now); err == nil {
+		t.Fatal("new tokens are signed with the new key only")
+	}
+	stranger, _ := auth.NewTokenSigner([]byte(strings.Repeat("c", 48)))
+	if _, err := stranger.WithPrevious(oldKey).Verify(fresh, now); err == nil {
+		t.Fatal("a third key must not verify")
+	}
+}

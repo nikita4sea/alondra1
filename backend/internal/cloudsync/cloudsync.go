@@ -62,16 +62,27 @@ const (
 )
 
 type Service struct {
-	store Store
-	key   []byte
+	store    Store
+	key      []byte
+	previous [][]byte // verification only, during a token-key rotation
 }
 
 // NewService derives the cursor-signing key from the server's token key, so cursors cannot be forged or moved to
 // another user or space.
-func NewService(store Store, tokenKey []byte) *Service {
+func NewService(store Store, tokenKey []byte, previousTokenKeys ...[]byte) *Service {
+	s := &Service{store: store, key: deriveCursorKey(tokenKey)}
+	for _, k := range previousTokenKeys {
+		if len(k) > 0 {
+			s.previous = append(s.previous, deriveCursorKey(k))
+		}
+	}
+	return s
+}
+
+func deriveCursorKey(tokenKey []byte) []byte {
 	mac := hmac.New(sha256.New, tokenKey)
 	mac.Write([]byte("alondra1 sync cursor v1"))
-	return &Service{store: store, key: mac.Sum(nil)}
+	return mac.Sum(nil)
 }
 
 type token struct {
@@ -96,9 +107,16 @@ func (s *Service) verify(value string, scope tasks.Scope, wantPosition bool) (to
 		return token{}, ErrInvalidCursor
 	}
 	got, err := base64.RawURLEncoding.DecodeString(signature)
-	mac := hmac.New(sha256.New, s.key)
-	mac.Write([]byte(body))
-	if err != nil || !hmac.Equal(got, mac.Sum(nil)) {
+	if err != nil {
+		return token{}, ErrInvalidCursor
+	}
+	valid := false
+	for _, key := range append([][]byte{s.key}, s.previous...) {
+		mac := hmac.New(sha256.New, key)
+		mac.Write([]byte(body))
+		valid = valid || hmac.Equal(got, mac.Sum(nil))
+	}
+	if !valid {
 		return token{}, ErrInvalidCursor
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(body)

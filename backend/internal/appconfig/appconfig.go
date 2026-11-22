@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // SMTP TLS modes.
@@ -34,6 +35,8 @@ type Config struct {
 
 	// TokenKey signs access tokens. OTPKey keys the one-time-code and IP hashes.
 	TokenKey []byte
+	// PreviousTokenKey (optional) still verifies tokens and cursors signed before a key rotation.
+	PreviousTokenKey []byte
 	OTPKey   []byte
 
 	MailFrom     string
@@ -45,6 +48,13 @@ type Config struct {
 
 	TrustProxyHeaders bool
 
+	// Operations. MetricsAddr serves /metrics on the internal network only ("off" disables). MaintenanceInterval runs the
+	// retention job (0 disables; then run "api maintenance" from a scheduler). BackupStatusFile is written by the backup
+	// service and read for metrics.
+	MetricsAddr         string
+	MaintenanceInterval time.Duration
+	BackupStatusFile    string
+
 	// Tunable abuse limits for sign-in code requests.
 	OTPPerIPPerHour     int
 	OTPGlobalPerMinute  int
@@ -52,7 +62,7 @@ type Config struct {
 
 // plainSecretVariables must never be set; their *_FILE counterparts are used instead.
 var plainSecretVariables = []string{
-	"ALONDRA1_DB_PASSWORD", "ALONDRA1_TOKEN_KEY", "ALONDRA1_OTP_KEY", "ALONDRA1_SMTP_PASSWORD", "POSTGRES_PASSWORD",
+	"ALONDRA1_DB_PASSWORD", "ALONDRA1_TOKEN_KEY", "ALONDRA1_TOKEN_KEY_PREVIOUS", "ALONDRA1_OTP_KEY", "ALONDRA1_SMTP_PASSWORD", "POSTGRES_PASSWORD",
 }
 
 // Load reads the configuration. lookup is os.LookupEnv in production; tests pass a map.
@@ -114,16 +124,26 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 		TrustProxyHeaders:  strings.EqualFold(get("ALONDRA1_TRUST_PROXY_HEADERS", "false"), "true"),
 		OTPPerIPPerHour:    getInt("ALONDRA1_OTP_PER_IP_PER_HOUR", 30),
 		OTPGlobalPerMinute: getInt("ALONDRA1_OTP_GLOBAL_PER_MINUTE", 300),
+		MetricsAddr:        get("ALONDRA1_METRICS_ADDR", ":9090"),
+		BackupStatusFile:   get("ALONDRA1_BACKUP_STATUS_FILE", ""),
 	}
 	cfg.DBPassword = readSecret("ALONDRA1_DB_PASSWORD_FILE", true)
 	cfg.TokenKey = []byte(readSecret("ALONDRA1_TOKEN_KEY_FILE", true))
+	cfg.PreviousTokenKey = []byte(readSecret("ALONDRA1_TOKEN_KEY_PREVIOUS_FILE", false))
+	if raw := get("ALONDRA1_MAINTENANCE_INTERVAL", "6h"); raw == "0" {
+		cfg.MaintenanceInterval = 0
+	} else if d, err := time.ParseDuration(raw); err != nil || d < time.Minute {
+		problems = append(problems, "ALONDRA1_MAINTENANCE_INTERVAL must be a duration of at least 1m (for example 6h), or 0")
+	} else {
+		cfg.MaintenanceInterval = d
+	}
 	cfg.OTPKey = []byte(readSecret("ALONDRA1_OTP_KEY_FILE", true))
 	cfg.SMTPPassword = readSecret("ALONDRA1_SMTP_PASSWORD_FILE", false)
 
 	if cfg.DBPassword == "" && !contains(problems, "ALONDRA1_DB_PASSWORD_FILE") {
 		problems = append(problems, "the database password file is empty")
 	}
-	for name, key := range map[string][]byte{"ALONDRA1_TOKEN_KEY_FILE": cfg.TokenKey, "ALONDRA1_OTP_KEY_FILE": cfg.OTPKey} {
+	for name, key := range map[string][]byte{"ALONDRA1_TOKEN_KEY_FILE": cfg.TokenKey, "ALONDRA1_OTP_KEY_FILE": cfg.OTPKey, "ALONDRA1_TOKEN_KEY_PREVIOUS_FILE": cfg.PreviousTokenKey} {
 		if len(key) > 0 && len(key) < MinKeyBytes {
 			problems = append(problems, fmt.Sprintf("%s must contain at least %d bytes", name, MinKeyBytes))
 		}

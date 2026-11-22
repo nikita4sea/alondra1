@@ -19,6 +19,10 @@ $files = [ordered]@{
     "token_key"         = { New-Secret 48 }   # signs access tokens
     "otp_key"           = { New-Secret 48 }   # HMAC key for one-time codes and refresh tokens
     "smtp_password"     = { "" }               # fill in for a real SMTP relay; empty for mailpit
+    "token_key_previous" = { "" }              # empty unless rotating the token key (docs/runbooks/production.md)
+    # age PUBLIC key(s) for encrypted backups. Generate the pair OFFLINE with `age-keygen -o backup-identity.txt`,
+    # keep that identity file away from this server, and put its "age1..." public key here.
+    "backup_recipients" = { "# Replace with your age public key (age1...). See docs/runbooks/backup-restore.md." }
 }
 foreach ($name in $files.Keys) {
     $path = Join-Path $dir $name

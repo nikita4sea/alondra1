@@ -3,9 +3,10 @@ name: backend
 on:
   push:
     branches: [main]
-    paths: ["backend/**", "packages/api-contract/**", "compose.yaml", ".env.example", ".github/workflows/backend.yml"]
+    paths: ["backend/**", "packages/api-contract/**", "deploy/**", "compose.yaml", ".env.example", ".github/workflows/backend.yml"]
   pull_request:
-    paths: ["backend/**", "packages/api-contract/**", "compose.yaml", ".env.example", ".github/workflows/backend.yml"]
+    paths: ["backend/**", "packages/api-contract/**", "deploy/**", "compose.yaml", ".env.example", ".github/workflows/backend.yml"]
+  workflow_call: {}  # the release workflow runs every check first
 
 permissions:
   contents: read
@@ -31,7 +32,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
-      - run: go vet ./...
+      - run: go vet ./... && go vet -tags integration ./...
       - run: go test -race ./...
       - name: Integration tests (PostgreSQL 17 service)
         # -p 1: the integration packages share one database and each resets its schema.
@@ -41,21 +42,107 @@ jobs:
       - name: Vulnerability check
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
-  contract-and-compose:
+  contract-and-ops-config:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Lint the OpenAPI contract
         run: npx --yes @redocly/cli@1 lint packages/api-contract/openapi.yaml
-      - name: Validate compose.yaml with throwaway secrets
+      - name: Throwaway secrets and .env
         run: |
           cp .env.example .env
-          for f in postgres_password token_key otp_key smtp_password; do head -c 48 /dev/urandom | base64 > "secrets/$f"; done
-          docker compose config --quiet
-          # The database must never publish a host port.
-          test -z "$(docker compose config --format json | jq -r '.services.db.ports // empty')"
-      - name: Build the API image
-        run: docker build -t alondra1-api:ci backend
+          printf 'ALONDRA1_DOMAIN=api.example.com\nALONDRA1_ACME_EMAIL=ops@example.com\n' >> .env
+          for f in postgres_password token_key otp_key smtp_password token_key_previous backup_recipients; do head -c 48 /dev/urandom | base64 > "secrets/$f"; done
+      - name: Validate compose.yaml with every profile
+        run: |
+          docker compose --profile tls --profile backup --profile monitoring --profile dev-mail config --quiet
+          config="$(docker compose --profile tls --profile backup --profile monitoring config --format json)"
+          # The database and the metrics port must never be published; the API binds to localhost only.
+          test -z "$(echo "$config" | jq -r '.services.db.ports // empty')"
+          echo "$config" | jq -e '[.services.api.ports[] | select(.host_ip != "127.0.0.1")] | length == 0'
+          echo "$config" | jq -e '[.services.api.ports[] | select(.target == 9090)] | length == 0'
+      - name: Validate the Caddyfile
+        run: |
+          docker run --rm -e ALONDRA1_DOMAIN=api.example.com -e ALONDRA1_ACME_EMAIL=ops@example.com \
+            -v "$PWD/deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.8 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Validate Prometheus config and alert rules
+        run: |
+          docker run --rm --entrypoint promtool -v "$PWD/deploy/monitoring:/etc/prometheus:ro" prom/prometheus:v2.55.1 check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint promtool -v "$PWD/deploy/monitoring:/etc/prometheus:ro" prom/prometheus:v2.55.1 check rules /etc/prometheus/alerts.yml
+      - name: Shellcheck the backup scripts
+        run: shellcheck deploy/backup/*.sh
+      - name: Build the API and backup images
+        run: |
+          docker build --build-arg VERSION=ci -t alondra1-api:ci backend
+          docker build -t alondra1-backup:ci deploy/backup
+
+  backup-restore:
+    # The real scripts, end to end: migrate and seed a database, back it up encrypted (with the built-in restore
+    # check), then decrypt with the offline identity and restore into a fresh database.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: alondra1
+          POSTGRES_USER: alondra1
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U alondra1 -d alondra1" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+      - name: Keys and secrets
+        run: |
+          sudo apt-get update && sudo apt-get install -y age
+          mkdir -p "$RUNNER_TEMP/secrets" "$RUNNER_TEMP/backups" && chmod 0777 "$RUNNER_TEMP/backups"
+          age-keygen -o "$RUNNER_TEMP/backup-identity.txt" 2> /dev/null
+          grep -o 'age1[0-9a-z]*' "$RUNNER_TEMP/backup-identity.txt" > "$RUNNER_TEMP/secrets/backup_recipients"
+          printf 'ci-only-not-a-secret' > "$RUNNER_TEMP/secrets/postgres_password"
+          head -c 48 /dev/urandom | base64 > "$RUNNER_TEMP/secrets/token_key"
+          head -c 48 /dev/urandom | base64 > "$RUNNER_TEMP/secrets/otp_key"
+          chmod 0644 "$RUNNER_TEMP"/secrets/*
+      - name: Migrate (api maintenance) and seed
+        working-directory: backend
+        env:
+          ALONDRA1_DB_HOST: localhost
+          ALONDRA1_DB_SSLMODE: disable
+          ALONDRA1_DB_PASSWORD_FILE: ${{ runner.temp }}/secrets/postgres_password
+          ALONDRA1_TOKEN_KEY_FILE: ${{ runner.temp }}/secrets/token_key
+          ALONDRA1_OTP_KEY_FILE: ${{ runner.temp }}/secrets/otp_key
+        run: |
+          go run ./cmd/api maintenance
+          PGPASSWORD=ci-only-not-a-secret psql -h localhost -U alondra1 -d alondra1 -c \
+            "INSERT INTO users (id, email_normalized, created_at) VALUES ('00000000-0000-7000-8000-00000000c1c1', 'backup-check@example.com', now())"
+      - name: Back up (encrypted, with restore check)
+        run: |
+          docker build -t alondra1-backup:ci deploy/backup
+          docker run --rm --network host -v "$RUNNER_TEMP/backups:/backups" -v "$RUNNER_TEMP/secrets:/run/secrets:ro" \
+            -e PGHOST=localhost -e PGDATABASE=alondra1 -e PGUSER=alondra1 alondra1-backup:ci once
+          ls -l "$RUNNER_TEMP/backups"
+          file="$(ls "$RUNNER_TEMP"/backups/alondra1-*.dump.age)"
+          # Encrypted: the PostgreSQL custom-format magic must not be readable in the file.
+          ! head -c 5 "$file" | grep -q PGDMP
+          (cd "$RUNNER_TEMP/backups" && sha256sum -c "$(basename "$file").sha256")
+          jq -e '.last_success_unix > 0 and .last_restore_check_unix > 0' "$RUNNER_TEMP/backups/status.json"
+      - name: Restore with the offline identity into a fresh database
+        run: |
+          file="$(basename "$(ls "$RUNNER_TEMP"/backups/alondra1-*.dump.age)")"
+          PGPASSWORD=ci-only-not-a-secret createdb -h localhost -U alondra1 alondra1_restored
+          docker run --rm --network host --entrypoint restore.sh -v "$RUNNER_TEMP/backups:/backups:ro" \
+            -v "$RUNNER_TEMP/secrets:/run/secrets:ro" -v "$RUNNER_TEMP/backup-identity.txt:/identity.txt:ro" \
+            -e PGHOST=localhost -e PGUSER=alondra1 alondra1-backup:ci "/backups/$file" /identity.txt alondra1_restored
+          test "$(PGPASSWORD=ci-only-not-a-secret psql -h localhost -U alondra1 -d alondra1_restored -tAc \
+            "SELECT count(*) FROM users WHERE email_normalized = 'backup-check@example.com'")" = 1
+      - name: Refuse to restore over the live database without confirmation
+        run: |
+          file="$(basename "$(ls "$RUNNER_TEMP"/backups/alondra1-*.dump.age)")"
+          ! docker run --rm --network host --entrypoint restore.sh -v "$RUNNER_TEMP/backups:/backups:ro" \
+            -v "$RUNNER_TEMP/secrets:/run/secrets:ro" -v "$RUNNER_TEMP/backup-identity.txt:/identity.txt:ro" \
+            -e PGHOST=localhost -e PGUSER=alondra1 -e PGDATABASE=alondra1 alondra1-backup:ci "/backups/$file" /identity.txt alondra1
 
   secrets-scan:
     runs-on: ubuntu-latest

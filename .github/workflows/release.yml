@@ -1,0 +1,95 @@
+name: release-backend
+
+# Tag api-vX.Y.Z to release. Produces signed, scanned images with an SBOM and the digests to deploy; production
+# deployment waits for a human approval on the "production" environment (configure required reviewers in the
+# repository settings). See docs/runbooks/release.md.
+on:
+  push:
+    tags: ["api-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/backend.yml
+
+  images:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write  # keyless cosign signatures
+    outputs:
+      api_digest: ${{ steps.api.outputs.digest }}
+      backup_digest: ${{ steps.backup.outputs.digest }}
+      registry: ${{ steps.meta.outputs.registry }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: meta
+        run: |
+          echo "version=${GITHUB_REF_NAME#api-v}" >> "$GITHUB_OUTPUT"
+          echo "registry=ghcr.io/$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: api
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: true
+          build-args: VERSION=${{ steps.meta.outputs.version }}
+          tags: ${{ steps.meta.outputs.registry }}/alondra1-api:${{ steps.meta.outputs.version }}
+          provenance: true
+          sbom: true
+      - id: backup
+        uses: docker/build-push-action@v6
+        with:
+          context: deploy/backup
+          push: true
+          tags: ${{ steps.meta.outputs.registry }}/alondra1-backup:${{ steps.meta.outputs.version }}
+          provenance: true
+          sbom: true
+      - name: Scan the images (fail on fixable high or critical vulnerabilities)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.meta.outputs.registry }}/alondra1-api@${{ steps.api.outputs.digest }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.meta.outputs.registry }}/alondra1-backup@${{ steps.backup.outputs.digest }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign by digest
+        run: |
+          cosign sign --yes "${{ steps.meta.outputs.registry }}/alondra1-api@${{ steps.api.outputs.digest }}"
+          cosign sign --yes "${{ steps.meta.outputs.registry }}/alondra1-backup@${{ steps.backup.outputs.digest }}"
+
+  production:
+    needs: images
+    runs-on: ubuntu-latest
+    environment: production  # required reviewers approve here
+    steps:
+      - name: Deploy these digests
+        run: |
+          {
+            echo "### Approved for production: ${{ needs.images.outputs.version }}"
+            echo
+            echo "Set in the server's .env, then follow docs/runbooks/release.md (pull, up -d, smoke test):"
+            echo
+            echo '```'
+            echo "ALONDRA1_API_IMAGE=${{ needs.images.outputs.registry }}/alondra1-api@${{ needs.images.outputs.api_digest }}"
+            echo "ALONDRA1_BACKUP_IMAGE=${{ needs.images.outputs.registry }}/alondra1-backup@${{ needs.images.outputs.backup_digest }}"
+            echo '```'
+            echo
+            echo "Verify the signature: cosign verify --certificate-identity-regexp 'https://github.com/${{ github.repository }}/' --certificate-oidc-issuer https://token.actions.githubusercontent.com <image@digest>"
+          } >> "$GITHUB_STEP_SUMMARY"

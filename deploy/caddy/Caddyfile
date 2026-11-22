@@ -1,0 +1,46 @@
+# TLS-terminating reverse proxy for the Alondra1 API (compose profile "tls"; docs/runbooks/production.md).
+# Caddy obtains and renews certificates automatically for ALONDRA1_DOMAIN (DNS must point at this host, ports 80 and
+# 443 open). The API itself is never exposed without TLS.
+{
+	email {$ALONDRA1_ACME_EMAIL}
+}
+
+{$ALONDRA1_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	request_body {
+		max_size 10MB
+	}
+
+	# Metrics stay on the internal network (api:9090); never through the public proxy.
+	@internal path /metrics /metrics/*
+	respond @internal 404
+
+	reverse_proxy api:8080 {
+		# Replace (not append to) X-Forwarded-For with the real peer, so a client cannot spoof its address in front of
+		# the rate limits (the API trusts the first entry when ALONDRA1_TRUST_PROXY_HEADERS=true).
+		header_up X-Forwarded-For {remote_host}
+		health_uri /v1/health/ready
+		health_interval 10s
+	}
+
+	log {
+		output stdout
+		# Paths can carry invitation tokens: log only method, status, and timing, never the URI.
+		format filter {
+			wrap json
+			fields {
+				request>uri delete
+				request>headers>Authorization delete
+				request>headers>Cookie delete
+			}
+		}
+	}
+}

@@ -1,6 +1,6 @@
 # Runbook: backend on Docker Compose (development)
 
-This runs the Alondra1 API and PostgreSQL on one machine for development. It is **not** a production setup: there is no TLS, no backup, and no monitoring. See [BACKEND_SPEC.md](../BACKEND_SPEC.md) §12.
+This runs the Alondra1 API and PostgreSQL on one machine for development. For production (TLS, backups, monitoring, releases) follow [production.md](production.md). See [BACKEND_SPEC.md](../BACKEND_SPEC.md) §12.
 
 ## First start
 
@@ -35,6 +35,6 @@ docker compose up -d api                           # recreate so it picks up the
 
 ## Rotating secrets
 
-- `token_key`: rotating it signs everyone out of their access tokens (15 minutes at most); refresh tokens keep working.
+- `token_key`: rotate without signing anyone out: copy it to `token_key_previous`, write a new value, restart `api`; empty `token_key_previous` after 30 days (see [production.md](production.md#rotating-secrets)).
 - `otp_key`: rotating it invalidates pending sign-in codes (at most 10 minutes old). Sessions are unaffected: refresh tokens are random 256-bit values stored as SHA-256 hashes. To sign everyone out, revoke sessions in the database.
 - `postgres_password`: change it in PostgreSQL first (`ALTER ROLE`), then update the file and recreate `api`.

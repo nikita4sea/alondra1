@@ -2,7 +2,7 @@
 
 The optional cloud for Alondra1 ([ADR 0001](../docs/decisions/0001-opt-in-cloud.md), [BACKEND_SPEC.md](../docs/BACKEND_SPEC.md)). It is not a replacement for the Windows app, and the Windows app does not use it yet.
 
-**Status: Milestone E.** Implemented: runtime configuration from secret files, PostgreSQL connection with retry, forward-only migrations, SMTP delivery, email one-time-code sign-in with rotating refresh tokens (B); spaces with roles, invitations, devices, and account deletion (C); tasks, lists, groups, completion history, portable settings, and export (D); sync with change log, paged bootstrap, signed change cursors, idempotent push, and a reference offline-first client (E). Operational readiness is Milestone F; the Windows cloud adapter is not written yet.
+**Status: Milestones A to F.** Implemented: runtime configuration from secret files, PostgreSQL connection with retry, forward-only migrations, SMTP delivery, email one-time-code sign-in with rotating refresh tokens (B); spaces with roles, invitations, devices, and account deletion (C); tasks, lists, groups, completion history, portable settings, and export (D); sync with change log, paged bootstrap, signed change cursors, idempotent push, and a reference offline-first client (E); retention job, metrics, zero-downtime key rotation, readiness draining, TLS proxy, encrypted backups with restore checks, alert rules, and the release pipeline (F). The Windows cloud adapter is not written yet.
 
 ## Layout
 
@@ -19,6 +19,8 @@ The optional cloud for Alondra1 ([ADR 0001](../docs/decisions/0001-opt-in-cloud.
 | `internal/settings` | Allowlisted settings namespaces with strict schemas and versions. |
 | `internal/cloudsync` | Sync pull side: signed cursors, paged bootstrap with watermark, change feed. (Push is `tasks.Service.Push`.) |
 | `internal/cloudsync/client` | Reference offline-first client: local copy, outbox with patch composition, conflict queue, bootstrap replay, purge on lost access. Drives the multi-device tests. |
+| `internal/maintenance` | Retention job (ADR 0003): purges and cursor floors; one instance at a time. |
+| `internal/metrics` | Dependency-free Prometheus registry; served on the internal metrics port. |
 | `internal/httpapi` | Routes, JSON error contract, request ids, auth middleware. |
 | `internal/testdb` | Real, migrated PostgreSQL 17 for integration tests (embedded or `ALONDRA1_TEST_DATABASE_URL`). |
 | `migrations` | `NNNN_name.sql`, embedded into the binary. |
@@ -64,6 +66,15 @@ The HTTP contract is [packages/api-contract/openapi.yaml](../packages/api-contra
 - `GET /v1/sync/changes?cursor=`: ordered entries after a signed cursor bound to user and space; only what the caller may see; `410 CURSOR_EXPIRED` below the retention floor.
 - `POST /v1/sync/push`: up to 100 mutations, each `applied`, `conflict` (with the server copy), or `rejected`; applied ones are recorded per device and mutation id, so retries never apply twice. Delete-versus-edit surfaces as a conflict.
 - Client rules (outbox, patch composition, conflicts, expired cursors, lost access): [ADR 0005](../docs/decisions/0005-sync-protocol.md), implemented by `internal/cloudsync/client`.
+
+## Operations (Milestone F)
+
+- `api` serves; `api maintenance` runs the retention job once; `api healthcheck` probes readiness (the image has no curl).
+- `/metrics` on `ALONDRA1_METRICS_ADDR` (`:9090`), internal network only: traffic and latency per route, sign-in and refresh outcomes, push results, database health, maintenance and backup freshness.
+- Readiness turns `503` when shutdown begins, then in-flight requests finish. Every response carries `X-Alondra1-API-Version`.
+- Token-key rotation: `ALONDRA1_TOKEN_KEY_PREVIOUS_FILE` still verifies access tokens and sync cursors signed with the old key.
+- Deployment pieces in [`deploy/`](../deploy): Caddy TLS proxy, backup sidecar (age-encrypted dumps, restore-checked), Prometheus with alert rules. Release pipeline: `.github/workflows/release.yml`.
+- Runbooks: [production](../docs/runbooks/production.md), [backups and restores](../docs/runbooks/backup-restore.md), [monitoring](../docs/runbooks/monitoring.md), [release](../docs/runbooks/release.md).
 
 ## Develop
 

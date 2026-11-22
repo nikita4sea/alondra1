@@ -1,0 +1,97 @@
+# Alert rules for the Alondra1 API. Validate with: promtool check rules alerts.yml
+groups:
+  - name: alondra1-availability
+    rules:
+      - alert: AlondraApiDown
+        expr: up{job="alondra1-api"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: The API is not answering metrics scrapes.
+          runbook: docs/runbooks/monitoring.md#api-down
+
+      - alert: AlondraDatabaseDown
+        expr: alondra1_db_up == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: The API cannot reach PostgreSQL.
+          runbook: docs/runbooks/monitoring.md#database-down
+
+      - alert: AlondraHighErrorRate
+        expr: |
+          sum(rate(alondra1_http_requests_total{code="5xx"}[5m]))
+            / clamp_min(sum(rate(alondra1_http_requests_total[5m])), 1e-9) > 0.05
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: More than 5% of API requests fail with a server error.
+          runbook: docs/runbooks/monitoring.md#errors-or-latency
+
+      - alert: AlondraSlowRequests
+        expr: histogram_quantile(0.95, sum by (le) (rate(alondra1_http_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: The 95th percentile of API latency is above 1 second.
+          runbook: docs/runbooks/monitoring.md#errors-or-latency
+
+  - name: alondra1-sign-in
+    rules:
+      - alert: AlondraSignInEmailFailing
+        expr: sum(increase(alondra1_auth_code_requests_total{result="delivery_failed"}[15m])) > 5
+        labels: { severity: critical }
+        annotations:
+          summary: Sign-in emails are not being delivered; nobody can sign in.
+          runbook: docs/runbooks/monitoring.md#sign-in-email
+
+      - alert: AlondraSignInAbuse
+        expr: sum(increase(alondra1_auth_code_requests_total{result="rate_limited"}[15m])) > 200
+        labels: { severity: warning }
+        annotations:
+          summary: Many sign-in code requests are being rate limited (possible abuse).
+          runbook: docs/runbooks/monitoring.md#sign-in-abuse
+
+      - alert: AlondraRefreshTokenReuse
+        expr: sum(increase(alondra1_auth_refreshes_total{result="reuse_detected"}[1h])) > 10
+        labels: { severity: warning }
+        annotations:
+          summary: Refresh-token reuse (possible token theft) is unusually frequent.
+          runbook: docs/runbooks/monitoring.md#refresh-reuse
+
+  - name: alondra1-data
+    rules:
+      - alert: AlondraBackupStale
+        expr: |
+          (time() - alondra1_backup_last_success_timestamp_seconds > 26 * 3600)
+            or absent(alondra1_backup_last_success_timestamp_seconds)
+        for: 30m
+        labels: { severity: critical }
+        annotations:
+          summary: No successful encrypted backup in the last 26 hours.
+          runbook: docs/runbooks/backup-restore.md#backup-alert
+
+      - alert: AlondraRestoreCheckStale
+        expr: time() - alondra1_backup_last_restore_check_timestamp_seconds > 26 * 3600
+        for: 30m
+        labels: { severity: critical }
+        annotations:
+          summary: No backup has passed its restore check in the last 26 hours.
+          runbook: docs/runbooks/backup-restore.md#backup-alert
+
+      - alert: AlondraMaintenanceStale
+        expr: |
+          (time() - alondra1_maintenance_last_success_timestamp_seconds > 13 * 3600)
+            or absent(alondra1_maintenance_last_success_timestamp_seconds)
+        for: 2h
+        labels: { severity: warning }
+        annotations:
+          summary: The retention job has not succeeded for 13 hours; deleted data is not being purged.
+          runbook: docs/runbooks/monitoring.md#maintenance
+
+      - alert: AlondraSyncConflictSpike
+        expr: sum(increase(alondra1_sync_push_mutations_total{status="conflict"}[1h])) > 500
+        labels: { severity: info }
+        annotations:
+          summary: Unusually many sync conflicts; check client versions and clocks.
+          runbook: docs/runbooks/monitoring.md#sync-conflicts

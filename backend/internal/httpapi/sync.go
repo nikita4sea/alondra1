@@ -76,6 +76,9 @@ func (s *Server) push(w http.ResponseWriter, r *http.Request, scope tasks.Scope,
 		return
 	}
 	results, err := s.Tasks.Push(r.Context(), scope, p.DeviceID, body.Mutations)
+	for _, result := range results {
+		s.Metrics.Inc("alondra1_sync_push_mutations_total", "status", result.Status)
+	}
 	if err != nil {
 		s.syncError(w, r, err)
 		return

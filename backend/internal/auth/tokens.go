@@ -43,7 +43,8 @@ type AccessClaims struct {
 
 // TokenSigner issues and verifies HS256 access tokens with one server-only key.
 type TokenSigner struct {
-	key []byte
+	key      []byte
+	previous [][]byte // accepted for verification only, during a key rotation
 }
 
 func NewTokenSigner(key []byte) (*TokenSigner, error) {
@@ -51,6 +52,17 @@ func NewTokenSigner(key []byte) (*TokenSigner, error) {
 		return nil, errors.New("token key must be at least 32 bytes")
 	}
 	return &TokenSigner{key: append([]byte(nil), key...)}, nil
+}
+
+// WithPrevious also accepts tokens signed with older keys (key rotation: tokens issued before the switch keep working
+// until they expire). New tokens are always signed with the current key.
+func (s *TokenSigner) WithPrevious(keys ...[]byte) *TokenSigner {
+	for _, k := range keys {
+		if len(k) > 0 {
+			s.previous = append(s.previous, append([]byte(nil), k...))
+		}
+	}
+	return s
 }
 
 func (s *TokenSigner) Issue(userID, sessionID string, now time.Time, ttl time.Duration) (string, error) {
@@ -72,7 +84,7 @@ func (s *TokenSigner) Verify(token string, now time.Time) (AccessClaims, error) 
 		return AccessClaims{}, ErrInvalidToken
 	}
 	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil || !hmac.Equal(signature, s.sign(parts[0]+"."+parts[1])) {
+	if err != nil || !s.signedByAnyKey(parts[0]+"."+parts[1], signature) {
 		return AccessClaims{}, ErrInvalidToken
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
@@ -96,6 +108,20 @@ func (s *TokenSigner) sign(input string) []byte {
 	mac := hmac.New(sha256.New, s.key)
 	mac.Write([]byte(input))
 	return mac.Sum(nil)
+}
+
+func (s *TokenSigner) signedByAnyKey(input string, signature []byte) bool {
+	if hmac.Equal(signature, s.sign(input)) {
+		return true
+	}
+	for _, key := range s.previous {
+		mac := hmac.New(sha256.New, key)
+		mac.Write([]byte(input))
+		if hmac.Equal(signature, mac.Sum(nil)) {
+			return true
+		}
+	}
+	return false
 }
 
 // NewRefreshToken returns an opaque 256-bit refresh token and the hash stored server-side. A plain SHA-256 is enough

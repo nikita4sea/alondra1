@@ -17,10 +17,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"alondra1/backend/internal/auth"
 	"alondra1/backend/internal/cloudsync"
+	"alondra1/backend/internal/metrics"
 	"alondra1/backend/internal/settings"
 	"alondra1/backend/internal/tasks"
 	"alondra1/backend/internal/tenancy"
@@ -37,6 +39,11 @@ type Server struct {
 	Ready             func(context.Context) error
 	Log               *slog.Logger
 	TrustProxyHeaders bool
+	// Metrics may be nil. Version is sent as X-Alondra1-API-Version. Draining makes readiness fail during shutdown, so
+	// a load balancer stops sending new requests before the server stops.
+	Metrics  *metrics.Registry
+	Version  string
+	Draining atomic.Bool
 }
 
 func (s *Server) Handler() http.Handler {
@@ -124,6 +131,9 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
+		if s.Version != "" {
+			w.Header().Set("X-Alondra1-API-Version", s.Version)
+		}
 		r = r.WithContext(context.WithValue(r.Context(), requestIDKey, requestID))
 		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		defer func() {
@@ -138,6 +148,8 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 			}
 			s.log().Info("request", "request_id", requestID, "method", r.Method, "route", route, "status", recorder.status,
 				"duration_ms", time.Since(started).Milliseconds())
+			s.Metrics.Inc("alondra1_http_requests_total", "route", route, "code", strconv.Itoa(recorder.status/100)+"xx")
+			s.Metrics.Observe("alondra1_http_request_duration_seconds", metrics.DurationBuckets, metrics.Since(started), "route", route)
 		}()
 		next.ServeHTTP(recorder, r)
 	})
@@ -169,6 +181,10 @@ func (s *Server) authenticated(next func(http.ResponseWriter, *http.Request, aut
 // ---------- handlers ----------
 
 func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
+	if s.Draining.Load() {
+		writeError(w, r, http.StatusServiceUnavailable, "NOT_READY", "The server is shutting down.")
+		return
+	}
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 	if s.Ready != nil {
@@ -191,6 +207,7 @@ func (s *Server) startEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := s.Auth.Start(r.Context(), body.Email, s.clientIP(r))
+	s.Metrics.Inc("alondra1_auth_code_requests_total", "result", authOutcome(err, "sent"))
 	if err != nil {
 		s.authError(w, r, err)
 		return
@@ -218,6 +235,7 @@ func (s *Server) verifyEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user, tokens, err := s.Auth.Verify(r.Context(), body.ChallengeID, body.Email, body.Code, auth.DeviceInfo{Name: body.Device.Name, Platform: body.Device.Platform})
+	s.Metrics.Inc("alondra1_auth_code_verifications_total", "result", authOutcome(err, "signed_in"))
 	if err != nil {
 		s.authError(w, r, err)
 		return
@@ -237,6 +255,7 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tokens, err := s.Auth.Refresh(r.Context(), body.RefreshToken)
+	s.Metrics.Inc("alondra1_auth_refreshes_total", "result", authOutcome(err, "rotated"))
 	if err != nil {
 		s.authError(w, r, err)
 		return
@@ -401,4 +420,26 @@ func newRequestID() string {
 	b := make([]byte, 12)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// authOutcome names the result of a sign-in step for metrics (no personal data).
+func authOutcome(err error, success string) string {
+	var limited *auth.RateLimitedError
+	switch {
+	case err == nil:
+		return success
+	case errors.As(err, &limited):
+		return "rate_limited"
+	case errors.Is(err, auth.ErrInvalidEmail):
+		return "invalid_email"
+	case errors.Is(err, auth.ErrDeliveryFailed):
+		return "delivery_failed"
+	case errors.Is(err, auth.ErrVerifyFailed):
+		return "invalid_code"
+	case errors.Is(err, auth.ErrRefreshReused):
+		return "reuse_detected"
+	case errors.Is(err, auth.ErrRefreshInvalid):
+		return "invalid"
+	}
+	return "error"
 }

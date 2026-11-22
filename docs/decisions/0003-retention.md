@@ -1,6 +1,6 @@
 # 0003: Deletion and retention of spaces, memberships, and accounts
 
-- **Status:** accepted (2026-11-22); purge jobs not implemented yet
+- **Status:** accepted (2026-11-22); enforced by the retention job (`backend/internal/maintenance`) since Milestone F
 - **Spec:** [BACKEND_SPEC.md](../BACKEND_SPEC.md) §5 ("every deletion has an explicit data-retention and sync tombstone policy"), §10, §13
 
 ## Decision
@@ -27,5 +27,5 @@ Audit events contain ids, event types, roles, and redacted addresses; never code
 
 ## Consequences
 
-- A purge job (Milestone F) is required before production; until then soft-deleted data stays in the database.
+- The retention job (`backend/internal/maintenance`) runs every 6 hours in the API and on demand (`api maintenance`); `AlondraMaintenanceStale` alerts when it stops succeeding. It advances `change_log_floor` as it purges, so stale sync cursors get `410` and clients bootstrap again.
 - Backups contain deleted data until they expire; backup retention must not exceed 35 days to keep the promise above.

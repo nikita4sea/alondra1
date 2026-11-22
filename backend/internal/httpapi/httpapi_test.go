@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"io"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 
 	"alondra1/backend/internal/auth"
 	"alondra1/backend/internal/httpapi"
+	"alondra1/backend/internal/metrics"
 )
 
 type mailbox struct {
@@ -240,5 +242,57 @@ func TestHealth(t *testing.T) {
 	f.ready = errors.New("db down")
 	if r := f.do(t, "GET", "/v1/health/ready", "", nil); r.status != 503 || errorCode(r) != "NOT_READY" {
 		t.Fatalf("not ready: %d %v", r.status, r.body)
+	}
+}
+
+func TestMetricsVersionAndDraining(t *testing.T) {
+	registry := metrics.New()
+	signer, _ := auth.NewTokenSigner([]byte(strings.Repeat("k", 48)))
+	box := &mailbox{}
+	api := &httpapi.Server{
+		Auth: auth.NewService(auth.NewMemoryStore(), box, signer, []byte(strings.Repeat("o", 48)), time.Now, auth.DefaultOptions(), nil),
+		Log:  slog.New(slog.NewTextHandler(io.Discard, nil)), Metrics: registry, Version: "1.2.3",
+	}
+	server := httptest.NewServer(api.Handler())
+	defer server.Close()
+	f := &fixture{server: server}
+
+	f.do(t, "POST", "/v1/auth/email/start", "", map[string]string{"email": "maya@example.com"})
+	f.do(t, "POST", "/v1/auth/email/start", "", map[string]string{"email": "maya@example.com"}) // cooldown
+	f.do(t, "POST", "/v1/auth/email/start", "", map[string]string{"email": "nope"})
+	f.do(t, "POST", "/v1/invites/a1i_SECRET/accept", "", nil)
+	r := f.do(t, "GET", "/v1/health/live", "", nil)
+	if r.header.Get("X-Alondra1-API-Version") != "1.2.3" {
+		t.Fatalf("version header: %q", r.header.Get("X-Alondra1-API-Version"))
+	}
+
+	var out strings.Builder
+	registry.Write(&out)
+	text := out.String()
+	for _, want := range []string{
+		`alondra1_auth_code_requests_total{result="sent"} 1`,
+		`alondra1_auth_code_requests_total{result="rate_limited"} 1`,
+		`alondra1_auth_code_requests_total{result="invalid_email"} 1`,
+		`alondra1_http_requests_total{code="2xx",route="GET /v1/health/live"} 1`,
+		`alondra1_http_requests_total{code="4xx",route="POST /v1/invites/{token}/accept"} 1`,
+		`alondra1_http_request_duration_seconds_count{route="POST /v1/auth/email/start"} 3`,
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(text, "maya@example.com") || strings.Contains(text, "SECRET") {
+		t.Fatal("metrics must not contain addresses or tokens")
+	}
+
+	if r := f.do(t, "GET", "/v1/health/ready", "", nil); r.status != 200 {
+		t.Fatalf("ready: %d", r.status)
+	}
+	api.Draining.Store(true)
+	if r := f.do(t, "GET", "/v1/health/ready", "", nil); r.status != 503 || errorCode(r) != "NOT_READY" {
+		t.Fatalf("draining: %d %v", r.status, r.body)
+	}
+	if r := f.do(t, "GET", "/v1/health/live", "", nil); r.status != 200 {
+		t.Fatal("liveness stays up while draining")
 	}
 }
