@@ -2,84 +2,26 @@
 
 // Integration tests against a real PostgreSQL. Run with:
 //
-//	go test -tags integration ./internal/postgres/...
-//
-// With ALONDRA1_TEST_DATABASE_URL set (CI service container) that database is used and its public schema is reset.
-// Otherwise an embedded PostgreSQL is downloaded and started in a temporary folder.
+//	go test -tags integration ./...
 package postgres_test
 
 import (
 	"context"
-	"fmt"
-	"io"
-	"log/slog"
-	"net"
-	"os"
-	"path/filepath"
 	"testing"
 	"testing/fstest"
 	"time"
 
-	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"alondra1/backend/internal/auth"
 	"alondra1/backend/internal/auth/storetest"
 	"alondra1/backend/internal/postgres"
+	"alondra1/backend/internal/testdb"
 	"alondra1/backend/migrations"
 )
 
-var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
-
-func database(t *testing.T) *pgxpool.Pool {
-	t.Helper()
-	ctx := context.Background()
-	url := os.Getenv("ALONDRA1_TEST_DATABASE_URL")
-	if url == "" {
-		port := freePort(t)
-		dir := t.TempDir()
-		server := embeddedpostgres.NewDatabase(embeddedpostgres.DefaultConfig().
-			Version(embeddedpostgres.V17).
-			Port(uint32(port)).
-			Database("alondra1").Username("alondra1").Password("test-only").
-			RuntimePath(filepath.Join(dir, "runtime")).DataPath(filepath.Join(dir, "data")).
-			BinariesPath(filepath.Join(os.TempDir(), "alondra1-embedded-postgres-17")).
-			Logger(io.Discard).StartTimeout(2 * time.Minute))
-		if err := server.Start(); err != nil {
-			t.Fatalf("embedded PostgreSQL: %v", err)
-		}
-		t.Cleanup(func() { _ = server.Stop() })
-		url = fmt.Sprintf("postgres://alondra1:test-only@127.0.0.1:%d/alondra1?sslmode=disable", port)
-	}
-	config, err := pgxpool.ParseConfig(url)
-	if err != nil {
-		t.Fatal(err)
-	}
-	connectCtx, cancel := context.WithTimeout(ctx, time.Minute)
-	defer cancel()
-	pool, err := postgres.ConnectWithConfig(connectCtx, config, quiet)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
-	if _, err := pool.Exec(ctx, "DROP SCHEMA public CASCADE; CREATE SCHEMA public"); err != nil {
-		t.Fatal(err)
-	}
-	return pool
-}
-
-func freePort(t *testing.T) int {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer listener.Close()
-	return listener.Addr().(*net.TCPAddr).Port
-}
-
 func TestPostgres(t *testing.T) {
-	pool := database(t)
+	pool := testdb.Start(t, false)
 	ctx := context.Background()
+	quiet := testdb.Quiet
 
 	t.Run("migrations apply once and are idempotent", func(t *testing.T) {
 		if err := postgres.Migrate(ctx, pool, migrations.FS, quiet); err != nil {
@@ -89,35 +31,31 @@ func TestPostgres(t *testing.T) {
 			t.Fatalf("second run must be a no-op: %v", err)
 		}
 		var count int
-		if err := pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 1 {
+		if err := pool.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 2 {
 			t.Fatalf("schema_migrations: %d %v", count, err)
 		}
 	})
 
 	t.Run("an unknown applied migration blocks a downgrade", func(t *testing.T) {
-		newer := fstest.MapFS{"0001_auth.sql": {Data: []byte("SELECT 1")}}
+		older := fstest.MapFS{"0001_auth.sql": {Data: []byte("SELECT 1")}, "0002_tenancy.sql": {Data: []byte("SELECT 1")}}
 		if _, err := pool.Exec(ctx, "INSERT INTO schema_migrations (version) VALUES ('9999_future')"); err != nil {
 			t.Fatal(err)
 		}
 		defer pool.Exec(ctx, "DELETE FROM schema_migrations WHERE version = '9999_future'")
-		if err := postgres.Migrate(ctx, pool, newer, quiet); err == nil {
+		if err := postgres.Migrate(ctx, pool, older, quiet); err == nil {
 			t.Fatal("expected downgrade refusal")
 		}
 	})
 
 	t.Run("store contract", func(t *testing.T) {
 		storetest.Run(t, func(t *testing.T) auth.Store {
-			if _, err := pool.Exec(ctx, "TRUNCATE audit_log, sessions, devices, auth_challenges, users RESTART IDENTITY CASCADE"); err != nil {
-				t.Fatal(err)
-			}
+			testdb.Truncate(t, pool)
 			return postgres.NewAuthStore(pool)
 		})
 	})
 
 	t.Run("full sign-in flow on PostgreSQL", func(t *testing.T) {
-		if _, err := pool.Exec(ctx, "TRUNCATE audit_log, sessions, devices, auth_challenges, users RESTART IDENTITY CASCADE"); err != nil {
-			t.Fatal(err)
-		}
+		testdb.Truncate(t, pool)
 		mailer := &captureMailer{}
 		signer, _ := auth.NewTokenSigner([]byte("an-integration-test-token-key-of-48-bytes-long!!"))
 		svc := auth.NewService(postgres.NewAuthStore(pool), mailer, signer, []byte("a-different-integration-test-otp-key-48-bytes!!!"), time.Now, auth.DefaultOptions(), quiet)

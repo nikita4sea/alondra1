@@ -71,6 +71,21 @@ func TestLoadRequiresKeysOfSufficientLengthThatDiffer(t *testing.T) {
 	}
 }
 
+func TestDatabaseSSLModesThatFallBackToPlaintextAreRefused(t *testing.T) {
+	for _, mode := range []string{"prefer", "allow", "bogus"} {
+		env := validEnv(t)
+		env["ALONDRA1_DB_SSLMODE"] = mode
+		if _, err := load(env); err == nil || !strings.Contains(err.Error(), "ALONDRA1_DB_SSLMODE") {
+			t.Fatalf("%s: expected refusal, got %v", mode, err)
+		}
+	}
+	env := validEnv(t)
+	env["ALONDRA1_DB_SSLMODE"] = "verify-full"
+	if _, err := load(env); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestPlaintextSMTPOnlyForLocalSink(t *testing.T) {
 	env := validEnv(t)
 	env["ALONDRA1_MAIL_FROM"] = "Alondra1 <no-reply@example.test>"

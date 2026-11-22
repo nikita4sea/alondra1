@@ -53,6 +53,25 @@ func (s *SMTPSender) SendSignInCode(ctx context.Context, to, code string, validF
 	return s.send(ctx, to, "Your Alondra1 sign-in code", body)
 }
 
+// SendInvite emails an invitation code. The space name and inviter come from users, so they appear only in the body
+// (never in a header) and with line breaks removed.
+func (s *SMTPSender) SendInvite(ctx context.Context, to, spaceName, inviterEmail, token string, validFor time.Duration) error {
+	if s.Host == "" {
+		return ErrNotConfigured
+	}
+	if containsLineBreak(to) || containsLineBreak(s.From) {
+		return errors.New("refusing a header with a line break")
+	}
+	flatten := strings.NewReplacer("\r", " ", "\n", " ")
+	days := int(validFor.Round(24*time.Hour) / (24 * time.Hour))
+	body := fmt.Sprintf("%s invited you to the Alondra1 space \"%s\".\r\n\r\n"+
+		"To join, sign in to Alondra1 with this email address, open Spaces, choose Join with an invitation, and paste this code:\r\n\r\n"+
+		"%s\r\n\r\nThe invitation expires in %d days and works once.\r\n\r\n"+
+		"If you do not know the sender, ignore this email. Nothing happens unless you accept.\r\n",
+		flatten.Replace(inviterEmail), flatten.Replace(spaceName), token, days)
+	return s.send(ctx, to, "You are invited to an Alondra1 space", body)
+}
+
 func (s *SMTPSender) send(ctx context.Context, to, subject, body string) error {
 	timeout := s.Timeout
 	if timeout <= 0 {

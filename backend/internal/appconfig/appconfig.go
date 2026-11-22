@@ -131,6 +131,12 @@ func Load(lookup func(string) (string, bool)) (Config, error) {
 	if len(cfg.TokenKey) >= MinKeyBytes && string(cfg.TokenKey) == string(cfg.OTPKey) {
 		problems = append(problems, "the token key and the OTP key must be different")
 	}
+	switch cfg.DBSSLMode {
+	case "disable", "require", "verify-ca", "verify-full":
+		// "prefer" and "allow" are refused: they silently fall back to an unencrypted connection.
+	default:
+		problems = append(problems, "ALONDRA1_DB_SSLMODE must be disable (internal Compose network only), require, verify-ca, or verify-full")
+	}
 	switch cfg.SMTPTLSMode {
 	case TLSModeStartTLS, TLSModeTLS:
 	case TLSModeNone:

@@ -3,6 +3,7 @@ package auth
 import (
 	"bytes"
 	"context"
+	"sort"
 	"sync"
 	"time"
 )
@@ -210,6 +211,36 @@ func (m *MemoryStore) TouchDevice(_ context.Context, deviceID string, now time.T
 	defer m.mu.Unlock()
 	if d, ok := m.devices[deviceID]; ok {
 		d.SeenAt = now
+	}
+	return nil
+}
+
+func (m *MemoryStore) ListDevices(_ context.Context, userID string) ([]Device, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var devices []Device
+	for _, d := range m.devices {
+		if d.UserID == userID && d.RevokedAt == nil {
+			devices = append(devices, *d)
+		}
+	}
+	sort.Slice(devices, func(i, j int) bool { return devices[i].SeenAt.After(devices[j].SeenAt) })
+	return devices, nil
+}
+
+func (m *MemoryStore) RevokeDevice(_ context.Context, userID, deviceID string, now time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	d, ok := m.devices[deviceID]
+	if !ok || d.UserID != userID || d.RevokedAt != nil {
+		return ErrNotFound
+	}
+	at := now
+	d.RevokedAt = &at
+	for _, s := range m.sessions {
+		if s.DeviceID == deviceID {
+			revoke(s, RevokeDevice, now)
+		}
 	}
 	return nil
 }

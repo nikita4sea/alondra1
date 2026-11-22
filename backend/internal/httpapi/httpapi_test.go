@@ -198,6 +198,27 @@ func TestRateLimitSetsRetryAfter(t *testing.T) {
 	}
 }
 
+func TestLogsRecordTheRoutePatternNotTokensInThePath(t *testing.T) {
+	f := newFixture(t)
+	f.do(t, "POST", "/v1/invites/a1i_SECRETINVITETOKEN/accept", "", nil)
+	f.do(t, "GET", "/v1/nothing/a1i_OTHERSECRET", "", nil)
+	logs := f.logs.String()
+	if strings.Contains(logs, "SECRETINVITETOKEN") || strings.Contains(logs, "OTHERSECRET") {
+		t.Fatalf("a token from the path reached the logs:\n%s", logs)
+	}
+	if !strings.Contains(logs, `"route":"POST /v1/invites/{token}/accept"`) || !strings.Contains(logs, `"route":"unmatched"`) {
+		t.Fatalf("route patterns missing:\n%s", logs)
+	}
+}
+
+func TestWrongMethodIsAJSONError(t *testing.T) {
+	f := newFixture(t)
+	r := f.do(t, "DELETE", "/v1/auth/refresh", "", nil)
+	if r.status != 405 || errorCode(r) != "METHOD_NOT_ALLOWED" || r.header.Get("Allow") != "POST" {
+		t.Fatalf("got %d %v Allow=%q", r.status, r.body, r.header.Get("Allow"))
+	}
+}
+
 func TestRequestIDIsEchoedOnlyWhenSafe(t *testing.T) {
 	f := newFixture(t)
 	if r := f.do(t, "GET", "/v1/health/live", "", nil, "X-Request-ID", "client-123"); r.header.Get("X-Request-ID") != "client-123" {

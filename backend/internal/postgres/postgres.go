@@ -21,21 +21,25 @@ import (
 // Connect opens a pool and waits for the database with exponential backoff and jitter, because Compose's
 // depends_on does not guarantee the database stays reachable after it first reports healthy.
 func Connect(ctx context.Context, cfg appconfig.Config, log *slog.Logger) (*pgxpool.Pool, error) {
-	poolConfig, err := pgxpool.ParseConfig("")
+	poolConfig, err := pgxpool.ParseConfig(ConnString(cfg))
 	if err != nil {
 		return nil, err
 	}
-	poolConfig.ConnConfig.Host = cfg.DBHost
-	poolConfig.ConnConfig.Port = uint16(cfg.DBPort)
-	poolConfig.ConnConfig.Database = cfg.DBName
-	poolConfig.ConnConfig.User = cfg.DBUser
+	// The password is set here, not in the connection string, so it never appears in a parse error.
 	poolConfig.ConnConfig.Password = cfg.DBPassword
-	if cfg.DBSSLMode == "disable" {
-		poolConfig.ConnConfig.TLSConfig = nil
-		poolConfig.ConnConfig.Fallbacks = nil
-	}
 	poolConfig.MaxConns = 20
 	return ConnectWithConfig(ctx, poolConfig, log)
+}
+
+// ConnString builds a keyword/value connection string without the password. sslmode is part of it so pgx derives the
+// TLS settings (including the server name for verify-full) from the real host; "require" never falls back to plaintext.
+func ConnString(cfg appconfig.Config) string {
+	return fmt.Sprintf("host=%s port=%d dbname=%s user=%s sslmode=%s",
+		quoteValue(cfg.DBHost), cfg.DBPort, quoteValue(cfg.DBName), quoteValue(cfg.DBUser), quoteValue(cfg.DBSSLMode))
+}
+
+func quoteValue(value string) string {
+	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(value) + "'"
 }
 
 func ConnectWithConfig(ctx context.Context, poolConfig *pgxpool.Config, log *slog.Logger) (*pgxpool.Pool, error) {

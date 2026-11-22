@@ -20,33 +20,56 @@ import (
 	"time"
 
 	"alondra1/backend/internal/auth"
+	"alondra1/backend/internal/tenancy"
 )
 
 const maxBodyBytes = 16 << 10
 
 type Server struct {
 	Auth              *auth.Service
+	Tenancy           *tenancy.Service
 	Ready             func(context.Context) error
 	Log               *slog.Logger
 	TrustProxyHeaders bool
 }
 
 func (s *Server) Handler() http.Handler {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /v1/health/live", func(w http.ResponseWriter, r *http.Request) {
+	r := newRouter()
+	r.handle("GET", "/v1/health/live", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	})
-	mux.HandleFunc("GET /v1/health/ready", s.ready)
-	mux.HandleFunc("POST /v1/auth/email/start", s.startEmail)
-	mux.HandleFunc("POST /v1/auth/email/verify", s.verifyEmail)
-	mux.HandleFunc("POST /v1/auth/refresh", s.refresh)
-	mux.Handle("POST /v1/auth/logout", s.authenticated(s.logout))
-	mux.Handle("POST /v1/auth/logout-all", s.authenticated(s.logoutAll))
-	mux.Handle("GET /v1/me", s.authenticated(s.me))
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	}))
+	r.handle("GET", "/v1/health/ready", http.HandlerFunc(s.ready))
+	r.handle("POST", "/v1/auth/email/start", http.HandlerFunc(s.startEmail))
+	r.handle("POST", "/v1/auth/email/verify", http.HandlerFunc(s.verifyEmail))
+	r.handle("POST", "/v1/auth/refresh", http.HandlerFunc(s.refresh))
+	r.handle("POST", "/v1/auth/logout", s.authenticated(s.logout))
+	r.handle("POST", "/v1/auth/logout-all", s.authenticated(s.logoutAll))
+	r.handle("GET", "/v1/me", s.authenticated(s.me))
+	s.tenancyRoutes(r)
+	r.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "NOT_FOUND", "No such endpoint.")
 	})
-	return s.middleware(mux)
+	return s.middleware(r.mux)
+}
+
+// router registers "METHOD /path" routes and, for every path, a method-less fallback that answers other methods with
+// a JSON 405 (the standard mux would answer in plain text).
+type router struct {
+	mux     *http.ServeMux
+	methods map[string][]string
+}
+
+func newRouter() *router { return &router{mux: http.NewServeMux(), methods: map[string][]string{}} }
+
+func (r *router) handle(method, path string, handler http.Handler) {
+	r.mux.Handle(method+" "+path, handler)
+	if _, seen := r.methods[path]; !seen {
+		r.mux.HandleFunc(path, func(w http.ResponseWriter, req *http.Request) {
+			w.Header().Set("Allow", strings.Join(r.methods[path], ", "))
+			writeError(w, req, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "This endpoint does not support "+req.Method+".")
+		})
+	}
+	r.methods[path] = append(r.methods[path], method)
 }
 
 // ---------- middleware ----------
@@ -88,7 +111,12 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 				s.log().Error("panic", "request_id", requestID, "panic", fmt.Sprint(failure))
 				writeError(recorder, r, http.StatusInternalServerError, "INTERNAL", "Something went wrong.")
 			}
-			s.log().Info("request", "request_id", requestID, "method", r.Method, "path", r.URL.Path, "status", recorder.status,
+			// Log the route pattern, never the raw path: paths can carry tokens (invite acceptance) and ids.
+			route := r.Pattern
+			if route == "" || route == "/" {
+				route = "unmatched"
+			}
+			s.log().Info("request", "request_id", requestID, "method", r.Method, "route", route, "status", recorder.status,
 				"duration_ms", time.Since(started).Milliseconds())
 		}()
 		next.ServeHTTP(recorder, r)
@@ -222,10 +250,21 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request, p auth.Principal) {
 		s.internal(w, r, err)
 		return
 	}
+	// A new account belongs to no space until the user creates one or accepts an invitation.
+	memberships := []map[string]any{}
+	if s.Tenancy != nil {
+		views, err := s.Tenancy.List(r.Context(), p.UserID)
+		if err != nil {
+			s.internal(w, r, err)
+			return
+		}
+		for _, v := range views {
+			memberships = append(memberships, tenantJSON(v))
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": user.ID, "email": user.EmailNormalized, "created_at": user.CreatedAt.UTC().Format(time.RFC3339),
-		// Spaces arrive with tenancy (Milestone C). A new account belongs to no space until the user creates one.
-		"memberships": []any{},
+		"memberships": memberships,
 	})
 }
 

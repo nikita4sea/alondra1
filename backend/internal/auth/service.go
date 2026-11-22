@@ -293,6 +293,7 @@ func (s *Service) newSession(ctx context.Context, userID, deviceID, familyID str
 type Principal struct {
 	UserID    string
 	SessionID string
+	DeviceID  string
 }
 
 // Authenticate checks an access token and that its session is still active, so logout takes effect immediately.
@@ -313,7 +314,25 @@ func (s *Service) Authenticate(ctx context.Context, accessToken string) (Princip
 	if session.UserID != claims.Subject || !now.Before(session.ExpiresAt) || (session.RevokedAt != nil && session.RevokeReason != RevokeRotated) {
 		return Principal{}, ErrSessionInactive
 	}
-	return Principal{UserID: claims.Subject, SessionID: claims.SessionID}, nil
+	return Principal{UserID: claims.Subject, SessionID: claims.SessionID, DeviceID: session.DeviceID}, nil
+}
+
+// Devices lists the caller's signed-in devices.
+func (s *Service) Devices(ctx context.Context, p Principal) ([]Device, error) {
+	return s.store.ListDevices(ctx, p.UserID)
+}
+
+// RevokeDevice signs one of the caller's devices out for good; revoking the current device is a logout.
+func (s *Service) RevokeDevice(ctx context.Context, p Principal, deviceID string) error {
+	if !IsUUID(deviceID) {
+		return ErrNotFound
+	}
+	now := s.now().UTC()
+	if err := s.store.RevokeDevice(ctx, p.UserID, deviceID, now); err != nil {
+		return err
+	}
+	s.audit(ctx, AuditEvent{ActorUserID: p.UserID, EventType: "device.revoked", TargetID: deviceID, CreatedAt: now})
+	return nil
 }
 
 // Logout revokes the caller's current session family member (this device's sign-in).

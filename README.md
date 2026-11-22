@@ -64,7 +64,7 @@ dotnet run --project src/Alondra1.App -- --demo     # try it with sample data
 
 ## Repository
 
-This is a monorepo. The Windows app is in [`apps/windows`](apps/windows). The optional cloud API is in [`backend`](backend) (Go, PostgreSQL, Docker Compose); it provides sign-in only so far, and the Windows app does not use it yet. [`packages`](packages) holds the API contract and the task schema shared by all clients.
+This is a monorepo. The Windows app is in [`apps/windows`](apps/windows). The optional cloud API is in [`backend`](backend) (Go, PostgreSQL, Docker Compose); it provides sign-in and spaces (Personal, Family, Organization) so far, and the Windows app does not use it yet. [`packages`](packages) holds the API contract and the task schema shared by all clients.
 
 ## Logo
 

@@ -221,6 +221,47 @@ func Run(t *testing.T, newStore func(t *testing.T) auth.Store) {
 		}
 	})
 
+	t.Run("revoking a device revokes its sessions and only the owner can", func(t *testing.T) {
+		s := newStore(t)
+		owner, stranger := id(t), id(t)
+		mustUser(t, s, owner, "j@example.com")
+		mustUser(t, s, stranger, "k@example.com")
+		laptop, phone := id(t), id(t)
+		for i, deviceID := range []string{laptop, phone} {
+			if err := s.CreateDevice(ctx, auth.Device{ID: deviceID, UserID: owner, Name: "d", Platform: "windows", SeenAt: base.Add(time.Duration(i) * time.Minute)}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		laptopSession, phoneSession := id(t), id(t)
+		for deviceID, sessionID := range map[string]string{laptop: laptopSession, phone: phoneSession} {
+			if err := s.CreateSession(ctx, auth.Session{ID: sessionID, UserID: owner, DeviceID: deviceID, RefreshHash: []byte(id(t)), TokenFamilyID: id(t), ExpiresAt: base.Add(time.Hour), CreatedAt: base, LastUsedAt: base}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		devices, err := s.ListDevices(ctx, owner)
+		if err != nil || len(devices) != 2 || devices[0].ID != phone {
+			t.Fatalf("list (most recent first): %+v %v", devices, err)
+		}
+		if err := s.RevokeDevice(ctx, stranger, laptop, base); !errors.Is(err, auth.ErrNotFound) {
+			t.Fatalf("another user revoked the device: %v", err)
+		}
+		if err := s.RevokeDevice(ctx, owner, laptop, base); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.RevokeDevice(ctx, owner, laptop, base); !errors.Is(err, auth.ErrNotFound) {
+			t.Fatalf("second revocation: %v", err)
+		}
+		if got, _ := s.GetSession(ctx, laptopSession); got.RevokedAt == nil || got.RevokeReason != auth.RevokeDevice {
+			t.Fatalf("laptop session must be revoked: %+v", got)
+		}
+		if got, _ := s.GetSession(ctx, phoneSession); got.RevokedAt != nil {
+			t.Fatal("the other device must stay signed in")
+		}
+		if devices, _ := s.ListDevices(ctx, owner); len(devices) != 1 || devices[0].ID != phone {
+			t.Fatalf("revoked devices are not listed: %+v", devices)
+		}
+	})
+
 	t.Run("audit accepts events with and without actors", func(t *testing.T) {
 		s := newStore(t)
 		userID := id(t)

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"alondra1/backend/internal/auth"
@@ -171,7 +172,42 @@ func (s *AuthStore) TouchDevice(ctx context.Context, deviceID string, now time.T
 	return err
 }
 
+func (s *AuthStore) ListDevices(ctx context.Context, userID string) ([]auth.Device, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id::text, user_id::text, name, platform, last_seen_at FROM devices
+		WHERE user_id = $1 AND revoked_at IS NULL ORDER BY last_seen_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(row pgx.CollectableRow) (auth.Device, error) {
+		var d auth.Device
+		err := row.Scan(&d.ID, &d.UserID, &d.Name, &d.Platform, &d.SeenAt)
+		return d, err
+	})
+}
+
+func (s *AuthStore) RevokeDevice(ctx context.Context, userID, deviceID string, now time.Time) error {
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `UPDATE devices SET revoked_at = $3 WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL`, deviceID, userID, now)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() != 1 {
+			return auth.ErrNotFound
+		}
+		_, err = tx.Exec(ctx, `UPDATE sessions SET revoked_at = coalesce(revoked_at, $2), revoke_reason = $3 WHERE device_id = $1`, deviceID, now, auth.RevokeDevice)
+		return err
+	})
+}
+
 func (s *AuthStore) Audit(ctx context.Context, e auth.AuditEvent) error {
+	return insertAudit(ctx, s.pool, e)
+}
+
+type execer interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
+
+func insertAudit(ctx context.Context, db execer, e auth.AuditEvent) error {
 	metadata := e.Metadata
 	if metadata == nil {
 		metadata = map[string]string{}
@@ -180,7 +216,7 @@ func (s *AuthStore) Audit(ctx context.Context, e auth.AuditEvent) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.pool.Exec(ctx, `INSERT INTO audit_log (tenant_id, actor_user_id, event_type, target_id, created_at, metadata)
+	_, err = db.Exec(ctx, `INSERT INTO audit_log (tenant_id, actor_user_id, event_type, target_id, created_at, metadata)
 		VALUES ($1, $2, $3, $4, $5, $6)`, nullable(e.TenantID), nullable(e.ActorUserID), e.EventType, nullable(e.TargetID), e.CreatedAt, payload)
 	return err
 }

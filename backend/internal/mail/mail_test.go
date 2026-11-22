@@ -108,6 +108,27 @@ func TestSendsAPlainTextCodeToTheLocalSink(t *testing.T) {
 	}
 }
 
+func TestInvitationKeepsUserTextOutOfHeaders(t *testing.T) {
+	server := startFakeSMTP(t, false)
+	sender := &SMTPSender{Host: "127.0.0.1", Port: server.port(), TLSMode: appconfig.TLSModeNone, From: "no-reply@example.test", Timeout: 5 * time.Second}
+	err := sender.SendInvite(context.Background(), "sam@example.com", "The Parks\r\nBcc: evil@example.com", "maya@example.com", "a1i_token", 7*24*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-server.from
+	<-server.rcpt
+	message := <-server.received
+	headers, body, _ := strings.Cut(message, "\r\n\r\n")
+	if strings.Contains(headers, "Parks") || strings.Contains(headers, "Bcc") {
+		t.Fatalf("user text reached the headers:\n%s", headers)
+	}
+	for _, want := range []string{"maya@example.com invited you", `"The Parks  Bcc: evil@example.com"`, "a1i_token", "expires in 7 days"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body lacks %q:\n%s", want, body)
+		}
+	}
+}
+
 func TestStartTLSModeRefusesAServerWithoutStartTLS(t *testing.T) {
 	server := startFakeSMTP(t, false)
 	sender := &SMTPSender{Host: "127.0.0.1", Port: server.port(), TLSMode: appconfig.TLSModeStartTLS, From: "no-reply@example.test", Timeout: 5 * time.Second}

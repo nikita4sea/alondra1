@@ -1,11 +1,17 @@
 openapi: 3.1.0
 info:
   title: Alondra1 cloud API
-  version: 1.0.0-milestone-b
+  version: 1.0.0-milestone-c
   description: |
     Optional cloud for Alondra1 (docs/BACKEND_SPEC.md, docs/decisions/0001-opt-in-cloud.md). This file is the source
-    of truth for the /v1 API. Milestone B implements health and email one-time-code authentication; the endpoints in
-    `x-alondra1-planned` are specified in the backend spec §9 and will be added here as they are implemented.
+    of truth for the /v1 API. Implemented: health, email one-time-code authentication (Milestone B), spaces with roles
+    and invitations, devices, and account deletion (Milestone C). The endpoints in `x-alondra1-planned` are specified in
+    the backend spec §9 and will be added here as they are implemented.
+
+    Spaces: a caller who is not an active member of a space gets `404 NOT_FOUND` for it, exactly as for an id that does
+    not exist, so space ids cannot be probed. Roles: `owner` (rename, delete, invite, remove anyone, change roles,
+    transfer ownership), `admin` (rename, invite admins or members, remove members), `member`. Everyone may leave; a
+    space with other members always keeps at least one owner. A Personal space has only its owner.
 
     Errors are always `{"error": {"code", "message", "request_id"}}` with a stable `code`. Every response carries
     `X-Request-ID` and `Cache-Control: no-store`. Request bodies are JSON (`application/json`), at most 16 KiB, with
@@ -17,6 +23,8 @@ tags:
   - name: health
   - name: auth
   - name: account
+  - name: spaces
+  - name: devices
 paths:
   /v1/health/live:
     get:
@@ -172,7 +180,7 @@ paths:
       summary: The signed-in account and its spaces
       responses:
         "200":
-          description: Profile. `memberships` stays empty until spaces exist (Milestone C).
+          description: Profile and the spaces the caller is an active member of. A new account has none.
           content:
             application/json:
               schema:
@@ -182,8 +190,277 @@ paths:
                   id: { type: string, format: uuid }
                   email: { type: string, format: email }
                   created_at: { type: string, format: date-time }
-                  memberships: { type: array, items: { type: object } }
+                  memberships: { type: array, items: { $ref: "#/components/schemas/Space" } }
         "401": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [account]
+      operationId: deleteMe
+      summary: Delete the account
+      description: |
+        Spaces where the caller is the only member are deleted; other memberships end; every session and device is
+        revoked; the email address is released for a new sign-up. Refused with `OWNERSHIP_TRANSFER_REQUIRED` (listing
+        `tenant_ids`) while the caller is the only owner of a space that still has other members.
+      responses:
+        "204": { description: Account deleted. }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/tenants:
+    get:
+      tags: [spaces]
+      operationId: listSpaces
+      summary: Spaces the caller belongs to
+      responses:
+        "200":
+          description: Active memberships.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tenants]
+                properties:
+                  tenants: { type: array, items: { $ref: "#/components/schemas/Space" } }
+        "401": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [spaces]
+      operationId: createSpace
+      summary: Create a Personal, Family, or Organization space
+      description: The type is always chosen explicitly and never changes. The caller becomes its owner.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [type]
+              properties:
+                type: { type: string, enum: [personal, family, organization] }
+                name: { type: string, maxLength: 100, description: Required for family and organization; a Personal space defaults to "My space". }
+      responses:
+        "201":
+          description: Created.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Space" } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/tenants/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [spaces]
+      operationId: getSpace
+      summary: One space, with the caller's role
+      responses:
+        "200":
+          description: The space.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Space" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [spaces]
+      operationId: renameSpace
+      summary: Rename (owner or admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 100 }
+      responses:
+        "200":
+          description: Renamed.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Space" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [spaces]
+      operationId: deleteSpace
+      summary: Delete the space (owner)
+      description: Soft delete; memberships end and pending invitations are revoked. Retention follows docs/decisions/0003-retention.md.
+      responses:
+        "204": { description: Deleted. }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/tenants/{id}/members:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [spaces]
+      operationId: listMembers
+      summary: Active members (any member)
+      responses:
+        "200":
+          description: Members, owners first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [members]
+                properties:
+                  members: { type: array, items: { $ref: "#/components/schemas/Member" } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/tenants/{id}/members/{user_id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: user_id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      tags: [spaces]
+      operationId: changeMemberRole
+      summary: Change a member's role (owner); making someone owner transfers ownership
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role]
+              properties:
+                role: { type: string, enum: [owner, admin, member] }
+      responses:
+        "200":
+          description: Updated member.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Member" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [spaces]
+      operationId: removeMember
+      summary: Remove a member, or leave (user_id = caller)
+      responses:
+        "204": { description: Removed. }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/tenants/{id}/invites:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [spaces]
+      operationId: listInvites
+      summary: Pending invitations (owner or admin)
+      responses:
+        "200":
+          description: Pending, unexpired invitations.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [invites]
+                properties:
+                  invites: { type: array, items: { $ref: "#/components/schemas/Invite" } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [spaces]
+      operationId: createInvite
+      summary: Email an invitation (owner or admin; Family and Organization only)
+      description: |
+        The invitation token is sent only by email and never returned. It is valid for 7 days, once, and only for the
+        signed-in account with the invited address. A new invitation replaces a pending one for the same address.
+        Nobody can invite above their own role or as owner. At most 20 invitations per space per hour.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, role]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+                role: { type: string, enum: [admin, member] }
+      responses:
+        "201":
+          description: Invitation sent.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Invite" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/tenants/{id}/invites/{invite_id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: invite_id, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [spaces]
+      operationId: revokeInvite
+      summary: Revoke a pending invitation (owner or admin)
+      responses:
+        "204": { description: Revoked. }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/invites/{token}/accept:
+    parameters:
+      - { name: token, in: path, required: true, schema: { type: string, pattern: "^a1i_[A-Za-z0-9_-]{43}$" } }
+    post:
+      tags: [spaces]
+      operationId: acceptInvite
+      summary: Join a space with an invitation from email
+      description: The signed-in account's email must equal the invited address (`INVITE_EMAIL_MISMATCH` otherwise).
+      responses:
+        "200":
+          description: Joined.
+          content: { application/json: { schema: { $ref: "#/components/schemas/Space" } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/devices:
+    get:
+      tags: [devices]
+      operationId: listDevices
+      summary: The caller's signed-in devices
+      description: Devices are registered at sign-in (`device` in the verify request).
+      responses:
+        "200":
+          description: Devices, most recently seen first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [devices]
+                properties:
+                  devices:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, platform, last_seen_at, current]
+                      properties:
+                        id: { type: string, format: uuid }
+                        name: { type: string }
+                        platform: { type: string, enum: [windows, android, ios, other] }
+                        last_seen_at: { type: string, format: date-time }
+                        current: { type: boolean, description: True for the device making this request. }
+        "401": { $ref: "#/components/responses/Error" }
+  /v1/devices/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [devices]
+      operationId: revokeDevice
+      summary: Sign a device out for good
+      responses:
+        "204": { description: Revoked; all its sessions end. }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     bearer:
@@ -191,6 +468,32 @@ components:
       scheme: bearer
       description: Access token from verify or refresh; valid 15 minutes.
   schemas:
+    Space:
+      type: object
+      required: [id, type, name, role, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [personal, family, organization] }
+        name: { type: string }
+        role: { type: string, enum: [owner, admin, member], description: The caller's role. }
+        created_at: { type: string, format: date-time }
+    Member:
+      type: object
+      required: [user_id, email, role, joined_at]
+      properties:
+        user_id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { type: string, enum: [owner, admin, member] }
+        joined_at: { type: string, format: date-time }
+    Invite:
+      type: object
+      required: [id, email, role, expires_at, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { type: string, enum: [admin, member] }
+        expires_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
     Status:
       type: object
       required: [status]
@@ -224,10 +527,16 @@ components:
             code:
               type: string
               description: Stable machine-readable code.
-              enum: [NOT_FOUND, MALFORMED_JSON, UNSUPPORTED_MEDIA_TYPE, BODY_TOO_LARGE, INVALID_EMAIL, RATE_LIMITED,
-                     EMAIL_DELIVERY_FAILED, INVALID_CODE, REFRESH_INVALID, REFRESH_REUSED, UNAUTHENTICATED, NOT_READY, INTERNAL]
+              enum: [NOT_FOUND, METHOD_NOT_ALLOWED, MALFORMED_JSON, UNSUPPORTED_MEDIA_TYPE, BODY_TOO_LARGE, INVALID_EMAIL,
+                     RATE_LIMITED, EMAIL_DELIVERY_FAILED, INVALID_CODE, REFRESH_INVALID, REFRESH_REUSED, UNAUTHENTICATED,
+                     FORBIDDEN, LAST_OWNER, PERSONAL_SPACE, ALREADY_MEMBER, INVITE_INVALID, INVITE_EMAIL_MISMATCH,
+                     INVALID_NAME, INVALID_TYPE, INVALID_ROLE, OWNERSHIP_TRANSFER_REQUIRED, NOT_READY, INTERNAL]
             message: { type: string }
             request_id: { type: string }
+            tenant_ids:
+              type: array
+              items: { type: string, format: uuid }
+              description: Only with OWNERSHIP_TRANSFER_REQUIRED.
   responses:
     Error:
       description: Error with a stable code.
@@ -240,10 +549,9 @@ components:
 security:
   - bearer: []
 x-alondra1-planned:
-  milestone-c: [POST /v1/tenants, GET /v1/tenants, GET /v1/tenants/{id}, PATCH /v1/tenants/{id}, DELETE /v1/tenants/{id},
-                GET /v1/tenants/{id}/members, POST /v1/tenants/{id}/invites, POST /v1/invites/{token}/accept,
-                DELETE /v1/tenants/{id}/invites/{invite_id}, DELETE /v1/tenants/{id}/members/{user_id},
-                POST /v1/devices, GET /v1/devices, DELETE /v1/devices/{id}, DELETE /v1/me]
+  # POST /v1/devices (spec §9) becomes the sync-device registration with cursors in Milestone E; until then devices
+  # are registered at sign-in.
+  milestone-e-devices: [POST /v1/devices]
   milestone-d: [GET /v1/tasks, POST /v1/tasks, GET /v1/tasks/{id}, PATCH /v1/tasks/{id}, DELETE /v1/tasks/{id},
                 GET /v1/tasks/completion-history, GET /v1/task-lists, POST /v1/task-lists, GET /v1/task-lists/{id},
                 PATCH /v1/task-lists/{id}, DELETE /v1/task-lists/{id}, GET /v1/list-groups, POST /v1/list-groups,

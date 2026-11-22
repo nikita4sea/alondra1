@@ -32,11 +32,12 @@ type User struct {
 }
 
 type Device struct {
-	ID       string
-	UserID   string
-	Name     string
-	Platform string
-	SeenAt   time.Time
+	ID        string
+	UserID    string
+	Name      string
+	Platform  string
+	SeenAt    time.Time
+	RevokedAt *time.Time
 }
 
 // Session is one device sign-in. Each refresh rotates it: the old row is revoked with reason "rotated" and a new row in
@@ -60,6 +61,8 @@ const (
 	RevokeLogout    = "logout"
 	RevokeLogoutAll = "logout_all"
 	RevokeReuse     = "reuse_detected"
+	RevokeDevice    = "device_revoked"
+	RevokeDeleted   = "account_deleted"
 )
 
 type AuditEvent struct {
@@ -102,6 +105,11 @@ type Store interface {
 	RevokeFamily(ctx context.Context, familyID, reason string, now time.Time) error
 	RevokeAllForUser(ctx context.Context, userID, reason string, now time.Time) error
 	TouchDevice(ctx context.Context, deviceID string, now time.Time) error
+	// ListDevices returns the user's devices that are not revoked, most recently seen first.
+	ListDevices(ctx context.Context, userID string) ([]Device, error)
+	// RevokeDevice marks the user's device revoked and revokes all its sessions (reason "device_revoked").
+	// ErrNotFound if the device does not belong to the user or is already revoked.
+	RevokeDevice(ctx context.Context, userID, deviceID string, now time.Time) error
 
 	Audit(ctx context.Context, event AuditEvent) error
 }

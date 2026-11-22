@@ -17,6 +17,7 @@ import (
 	"alondra1/backend/internal/httpapi"
 	"alondra1/backend/internal/mail"
 	"alondra1/backend/internal/postgres"
+	"alondra1/backend/internal/tenancy"
 	"alondra1/backend/migrations"
 )
 
@@ -58,8 +59,10 @@ func run(log *slog.Logger) error {
 	if cfg.SMTPHost == "" {
 		log.Warn("ALONDRA1_SMTP_HOST is empty: sign-in codes cannot be sent")
 	}
-	service := auth.NewService(postgres.NewAuthStore(pool), mail.FromConfig(cfg), signer, cfg.OTPKey, time.Now, options, log)
-	api := &httpapi.Server{Auth: service, Ready: pool.Ping, Log: log, TrustProxyHeaders: cfg.TrustProxyHeaders}
+	mailer := mail.FromConfig(cfg)
+	service := auth.NewService(postgres.NewAuthStore(pool), mailer, signer, cfg.OTPKey, time.Now, options, log)
+	spaces := tenancy.NewService(postgres.NewTenancyStore(pool), mailer, time.Now, log)
+	api := &httpapi.Server{Auth: service, Tenancy: spaces, Ready: pool.Ping, Log: log, TrustProxyHeaders: cfg.TrustProxyHeaders}
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,

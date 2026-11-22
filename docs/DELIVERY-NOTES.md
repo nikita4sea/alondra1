@@ -11,6 +11,34 @@ This is the release history, with what was verified for each release and what wa
 
 **Test machine:** one PC running Windows build 10.0.26300 (DisplayVersion 26H2). That is the only OS any release was launched on.
 
+## Unreleased: cloud backend, Milestone C and review fixes (2026-11-22)
+
+- **Review fixes (Milestone B):**
+  - The database connection now enforces `ALONDRA1_DB_SSLMODE`. The default `require` was silently treated as "prefer", which can fall back to an unencrypted connection. `prefer` and `allow` are now refused.
+  - Request logs record the route pattern instead of the raw path, so tokens in a path never reach the logs.
+  - A wrong HTTP method now returns a JSON `405 METHOD_NOT_ALLOWED` with `Allow`, instead of plain text.
+- **Spaces (Milestone C):**
+  - Personal, Family, and Organization spaces, with owner, admin, and member roles.
+  - Emailed invitations: 7 days, one use, only for the invited address, and the token never appears in API responses.
+  - Removing members, leaving, and ownership transfer. A space with members always keeps an owner, also under concurrent requests.
+  - Device list and revocation.
+  - Account deletion: refused while you are the only owner of a space that still has other members. Otherwise the address is pseudonymized so it can sign up again.
+  - Retention policy: [ADR 0003](decisions/0003-retention.md). Migration `0002_tenancy`. See [backend/README.md](../backend/README.md#spaces-spec-5).
+- **Verified:**
+  - `go vet` is clean and the unit tests pass, including the role and permission matrix, the SSL-mode handling, and the absence of path tokens in logs.
+  - An end-to-end HTTP test with several users on a real PostgreSQL 17 covers:
+    - an outsider gets `404` for every space operation, even with the right id;
+    - an invitation works only for the invited address, and only once;
+    - members cannot manage the space, and nobody can invite above their own role;
+    - admins cannot remove owners or change roles;
+    - invitations can be revoked and they expire;
+    - the last owner is protected, and ownership can be transferred;
+    - two owners demoting each other at the same time leave exactly one owner;
+    - a device can be revoked;
+    - account deletion is blocked while you are the only owner of a space with members, then releases the address.
+  - The built API applied both migrations at startup against PostgreSQL.
+- **Not verified:** Docker, mailpit, and the CI workflows are still not run on this machine. The Windows app does not use the backend.
+
 ## Unreleased: monorepo and cloud backend, Milestones A and B (2026-11-21)
 
 Work toward the optional cloud in [BACKEND_SPEC.md](BACKEND_SPEC.md). The Windows app does not use the backend yet, and nothing here is production-ready.

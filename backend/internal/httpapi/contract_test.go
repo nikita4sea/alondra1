@@ -46,13 +46,25 @@ func TestEveryDocumentedOperationIsRouted(t *testing.T) {
 
 func TestErrorCodesInCodeAreDocumented(t *testing.T) {
 	spec := openAPI(t)
-	source, err := os.ReadFile("httpapi.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, match := range regexp.MustCompile(`http\.Status\w+, "([A-Z_]+)"`).FindAllStringSubmatch(string(source), -1) {
-		if !strings.Contains(spec, match[1]) {
-			t.Errorf("error code %s is not in the OpenAPI Error enum", match[1])
+	files, _ := filepath.Glob("*.go")
+	codes := regexp.MustCompile(`(?:http\.Status\w+, "|"code": ")([A-Z_]+)"`)
+	found := 0
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
 		}
+		source, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, match := range codes.FindAllStringSubmatch(string(source), -1) {
+			found++
+			if !strings.Contains(spec, match[1]) {
+				t.Errorf("%s: error code %s is not in the OpenAPI Error enum", file, match[1])
+			}
+		}
+	}
+	if found < 20 {
+		t.Fatalf("expected to find the error codes, found %d", found)
 	}
 }
