@@ -49,7 +49,15 @@ The shell grid is header 56 · 8 · toolbar 48 · 8 · content. In Mail, `Layout
 Alignment in the Mail panes:
 
 - **List pane:** the folder title starts at the 16 px inset; the count is right-anchored at the 16 px inset. From / Subject / Received and every message row use one column definition (`Controls/MailColumns.cs`), so the labels stay over their columns at any width. Each row reserves a 16 px unread-dot gutter, so “From” lines up with the sender names, not with the title. When the list shows its scroll bar, the column header takes the same right inset.
-- **Reading pane:** the status icon, label, and **Plain text** sit in the same 48 px header row as the list's title row; the subject (or “No message selected”) starts 12 px below it. The header row keeps its size with or without a message.
+- **Reading pane:** the storage state (small, secondary) and the **HTML | Plain text** switch sit in the same 48 px header row as the list's title row; the subject (or “No message selected”) starts 12 px below it, followed by sender, recipients, date, the remote-image bar, and the attachments. The header row keeps its size with or without a message.
+
+### Message reader
+
+- **Body:** `Controls/MailBodyView` hosts an isolated WebView2 (composition control, so pane corners and reminder cards still draw over it). The page is served from memory at a private address with the Content Security Policy of `Core/Html/MailHtml`; every other request is refused unless remote images are allowed, and then only image requests pass, without cookies or referrer. Navigation, new windows, downloads, and permissions are refused; http, https, and mailto links open in the default app.
+- **HTML** keeps the sender's look on a white page (no forced dark inversion); text-heavy mail is centered at a 760 px max width, wide tables scroll inside the body, long URLs wrap. **Plain text** follows the theme on a transparent page, with links.
+- **Remote images** bar: “N remote images are blocked to protect your privacy.” with **Load images** and **Always load from …**; blocked images keep their size and alt text.
+- **Attachments:** a wrap of chips (icon, name, size, Open, Save). Pictures used inside the HTML are not listed.
+- Without the WebView2 runtime the reader shows the plain text and says that HTML cannot be displayed.
 - **Selection** changes only colors (fill and foreground), never font weight, padding, or borders, so tabs and workspace tabs keep their bounds.
 
 ### Workspace tabs
@@ -74,6 +82,12 @@ The header and toolbar never wrap into another row. As the window narrows, in th
 
 These breakpoints are wider than before the tab strip (labels used to hide at 1120 px, search at 720, overflow at 600 and 470) because the rounded tabs need more room than flat buttons.
 
+**Mail panes.** While the list and the reading pane are side by side, the list keeps at least 420 px and the reader 440 px (stacked: 200 and 240 px); the default reader width (520 px) gives about 55/45 at the default window. When both no longer fit, Mail shows **one pane at a time** (`LayoutArranger.FitsSplit`, `SinglePane`): the list, then the message after a click or Enter, with a **Back** button (and Esc) that returns to the list with its selection and scroll position. The folder pane stays where it is.
+
+**Keyboard.** Up/Down move through the list, Shift/Ctrl select several rows (the count shows “3 selected · …” and Delete, Archive, and Mark read/unread act on all of them), Enter opens a message, Esc goes back or closes a menu. Mail shortcuts (Ctrl+R, Ctrl+Shift+F, Delete) do nothing while you type in a text box.
+
+**Display scaling.** Geometry is in DIPs with layout rounding. `--scale=1.25|1.5|2` renders at that scale, and `scripts/snapshot-matrix.ps1` checks header and toolbar heights, insets, the toolbar center line, control heights, overlaps, the pane gutter, and the From column at 100, 125, 150, and 200 %.
+
 The module that is open always stays visible in the header. In To-do, the list sidebar becomes a menu button under 720 px and the details pane floats over the list under 1000 px.
 
 ## Tokens
@@ -95,7 +109,7 @@ Spacing follows 4 / 8 / 12 / 16 / 20 / 24 (panel padding 16, field gap 8, sectio
 | --- | --- | --- | --- |
 | ChromeBrush | #F6F4FA | #16151F | application base (lavender-tinted) |
 | SurfaceBrush | #FFFFFF | #1E1D2A | popups, inputs (always opaque) |
-| PanelBrush | #FFFFFF | #1E1D2A | main panels; about 69% opaque when a background picture is on |
+| PanelBrush | #FFFFFF | #1E1D2A | main panels; 88% opaque when a background picture is on (text keeps 4.5:1 over any picture) |
 | HeaderScrimBrush | transparent | transparent | 45% of the base color behind the header when a picture is on |
 | SubtleBrush | #FAF9FD | #252434 | toolbar fields, cards |
 | TextBrush | #2A2940 | #ECEBF5 | text (deep indigo slate / near white) |
@@ -147,7 +161,7 @@ Settings → Background:
 
 Changes preview live on the main window; Save settings keeps them, closing Settings without saving restores the previous background and removes any picture copied in that session. Settings persist in `config.json` (`appearance.background`); older config files get the defaults.
 
-The picture sits behind the whole window and shows through the main panels (about 69% opaque) and the header (a 45% scrim of the base color behind the labels). Its brightness adapts to the theme: in dark mode a light picture is darkened toward a 36% average, in light mode a dark picture is lifted toward 72%, so text over it stays readable while the picture keeps its detail. Popups, menus, inputs, and message bodies stay opaque.
+The picture sits behind the whole window and shows through the gaps and faintly behind the main panels (88% opaque, so even muted text keeps 4.5:1 contrast over a white or black area; `LegibilityTests`) and the header (a 45% scrim of the base color behind the labels). Its brightness adapts to the theme: in dark mode a light picture is darkened toward a 36% average, in light mode a dark picture is lifted toward 72%, so text over it stays readable while the picture keeps its detail. Popups, menus, inputs, and message bodies stay opaque.
 
 The built-in pictures are original artwork drawn for Alondra1 by `apps/windows/design/backgrounds/generate.ps1` (no third-party content) and bundled in the app (about 380 KB in total). Nothing is downloaded at runtime.
 
@@ -186,4 +200,4 @@ The built-in pictures are original artwork drawn for Alondra1 by `apps/windows/d
 - **Sliders** in Settings use the standard Windows look.
 - **WebP** pictures need the Windows WebP codec (included in Windows 11; on Windows 10 it is the “WebP Image Extensions” Store package). Without it the picker explains this and nothing changes.
 - Screen readers were not used for testing; the accessibility tree was read through UI Automation.
-- **Spacing at display scaling** other than 100% (125%, 150%, 200%) and after maximize/restore was not measured; geometry is in DIPs with layout rounding on.
+- **Display scaling** is checked by rendering at 125, 150, and 200 % (`--scale`), not by switching the Windows setting; maximize/restore was not measured.

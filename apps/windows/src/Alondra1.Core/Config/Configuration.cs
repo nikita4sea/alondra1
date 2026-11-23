@@ -229,7 +229,8 @@ public sealed class LayoutSettings
     public Layout.DockEdge ReadingDock { get; set; } = Layout.DockEdge.Right;
     public double FolderBreadthSide { get; set; } = 152;
     public double FolderBreadthBand { get; set; } = 52;
-    public double ReadingBreadthSide { get; set; } = 330;
+    /// <summary>Reading pane width beside the list; 520 gives about 55/45 at the default window width.</summary>
+    public double ReadingBreadthSide { get; set; } = 520;
     public double ReadingBreadthBand { get; set; } = 174;
 
     /// <summary>The account shown in Mail (display name), or null for All accounts. Restored at the next start.</summary>

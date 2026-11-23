@@ -26,6 +26,19 @@ public readonly record struct Box(double X, double Y, double Width, double Heigh
 
 public readonly record struct SplitterHit(Box Bounds, string PaneId, DockEdge Edge);
 
+/// <summary>Which pane fills the space when list and reader do not fit next to each other (client spec §5.1).</summary>
+public enum SinglePane
+{
+    /// <summary>List and reader are both shown.</summary>
+    None,
+
+    /// <summary>Only the list is shown.</summary>
+    List,
+
+    /// <summary>Only the open message is shown (with a Back button).</summary>
+    Reader,
+}
+
 public sealed record LayoutFrames(Box Folders, Box Inbox, Box Reader, IReadOnlyList<SplitterHit> Splitters);
 
 public abstract record LayoutNode;
@@ -53,6 +66,33 @@ public static class LayoutArranger
     /// </summary>
     public const double Gutter = 8;
 
+    /// <summary>
+    /// Minimum list and reader sizes while both are shown. Below them the panes are shown one at a time
+    /// (<see cref="FitsSplit"/>) instead of squeezing either.
+    /// </summary>
+    public const double SplitMinList = 420;
+    public const double SplitMinReader = 440;
+    public const double SplitMinListHeight = 200;
+    public const double SplitMinReaderHeight = 240;
+
+    /// <summary>
+    /// True when list and reader fit next to each other (or stacked, for a top or bottom reading pane) at their
+    /// minimum sizes, after the folder pane takes its space.
+    /// </summary>
+    public static bool FitsSplit(DockEdge folders, DockEdge reading, double width, double height, double folderBreadth, double gap = Gutter)
+    {
+        if (reading == DockEdge.Hidden)
+            return true;
+        var room = new Box(0, 0, width, height);
+        if (folders is DockEdge.Left or DockEdge.Right)
+            room = room with { Width = width - Math.Max(folderBreadth, MinFolderSide) - gap };
+        else if (folders is DockEdge.Top or DockEdge.Bottom)
+            room = room with { Height = height - Math.Max(folderBreadth, MinFolderBand) - gap };
+        return reading is DockEdge.Left or DockEdge.Right
+            ? room.Width >= SplitMinList + gap + SplitMinReader
+            : room.Height >= SplitMinListHeight + gap + SplitMinReaderHeight;
+    }
+
     public static LayoutNode Compose(DockEdge folders, DockEdge reading)
     {
         LayoutNode node = new LayoutLeaf("inbox");
@@ -76,15 +116,19 @@ public static class LayoutArranger
         double folderBreadth,
         double readingBreadth,
         double gap = Gutter,
-        double pad = 0)
+        double pad = 0,
+        SinglePane single = SinglePane.None)
     {
         var map = new Dictionary<string, Box>(StringComparer.Ordinal);
         var splitters = new List<SplitterHit>();
         var inner = new Box(pad, pad, Math.Max(0, width - (2 * pad)), Math.Max(0, height - (2 * pad)));
-        ArrangeNode(Compose(folders, reading), inner, folderBreadth, readingBreadth, gap, map, splitters);
+        // One pane at a time: lay out as if there were no reading pane, then give the list's place to whichever pane shows.
+        ArrangeNode(Compose(folders, single == SinglePane.None ? reading : DockEdge.Hidden), inner, folderBreadth, readingBreadth, gap, map, splitters);
         map.TryGetValue("folders", out var folderBox);
         map.TryGetValue("inbox", out var inboxBox);
         map.TryGetValue("reader", out var readerBox);
+        if (single == SinglePane.Reader)
+            (inboxBox, readerBox) = (default, inboxBox);
         return new LayoutFrames(folderBox, inboxBox, readerBox, splitters);
     }
 
@@ -132,6 +176,17 @@ public static class LayoutArranger
         var restMin = MinSize(rest, gap);
         var requested = split.PaneId == "folders" ? folderBreadth : readingBreadth;
         var paneMin = PaneMin(split);
+        // While list and reader share the space, neither goes below its split minimum (when there is room for both).
+        if (split.PaneId == "reader")
+        {
+            var axis = split.Horizontal ? box.Width : box.Height;
+            var (listMin, readerMin) = split.Horizontal ? (SplitMinList, SplitMinReader) : (SplitMinListHeight, SplitMinReaderHeight);
+            if (axis >= listMin + gap + readerMin)
+            {
+                paneMin = Math.Max(paneMin, readerMin);
+                restMin = split.Horizontal ? (Math.Max(restMin.Width, listMin), restMin.Height) : (restMin.Width, Math.Max(restMin.Height, listMin));
+            }
+        }
         if (split.Horizontal)
         {
             var (breadth, restSize) = SplitAxis(box.Width, requested, paneMin, restMin.Width, gap);

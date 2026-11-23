@@ -34,6 +34,16 @@ public sealed class MailDockPanel : Panel
     public static readonly DependencyProperty ReadingBreadthProperty = DependencyProperty.Register(
         nameof(ReadingBreadth), typeof(double), typeof(MailDockPanel), new FrameworkPropertyMetadata(330d, FrameworkPropertyMetadataOptions.AffectsMeasure));
 
+    public static readonly DependencyProperty SingleProperty = DependencyProperty.Register(
+        nameof(Single), typeof(SinglePane), typeof(MailDockPanel), new FrameworkPropertyMetadata(SinglePane.None, FrameworkPropertyMetadataOptions.AffectsMeasure));
+
+    /// <summary>One pane at a time (list, or the open message) when list and reader do not fit next to each other.</summary>
+    public SinglePane Single
+    {
+        get => (SinglePane)GetValue(SingleProperty);
+        set => SetValue(SingleProperty, value);
+    }
+
     public DockEdge FoldersDock
     {
         get => (DockEdge)GetValue(FoldersDockProperty);
@@ -72,7 +82,7 @@ public sealed class MailDockPanel : Panel
 
         // Measure each pane at the size it will be arranged to. Measuring at the full panel size made wrapped text
         // (the reading pane) ask for more width than its slot, and WPF then clipped it instead of wrapping it.
-        var frames = LayoutArranger.Arrange(FoldersDock, ReadingDock, size.Width, size.Height, _dragFolder ?? FolderBreadth, _dragReading ?? ReadingBreadth);
+        var frames = LayoutArranger.Arrange(FoldersDock, ReadingDock, size.Width, size.Height, _dragFolder ?? FolderBreadth, _dragReading ?? ReadingBreadth, single: Single);
         MeasureNamed(0, frames.Folders);
         MeasureNamed(1, frames.Inbox);
         MeasureNamed(2, frames.Reader);
@@ -81,7 +91,7 @@ public sealed class MailDockPanel : Panel
 
     protected override Size ArrangeOverride(Size finalSize)
     {
-        var frames = LayoutArranger.Arrange(FoldersDock, ReadingDock, finalSize.Width, finalSize.Height, _dragFolder ?? FolderBreadth, _dragReading ?? ReadingBreadth);
+        var frames = LayoutArranger.Arrange(FoldersDock, ReadingDock, finalSize.Width, finalSize.Height, _dragFolder ?? FolderBreadth, _dragReading ?? ReadingBreadth, single: Single);
         _splitters = frames.Splitters;
         ArrangeNamed(0, frames.Folders);
         ArrangeNamed(1, frames.Inbox);

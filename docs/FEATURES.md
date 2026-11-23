@@ -29,7 +29,10 @@ What Alondra1 1.3.0 does today, by workspace. Each workspace has a keyboard shor
 - Inbox, Sent, Drafts, Archive, and Trash as toolbar tabs (Ctrl+Shift+1 … 5).
 - A compact list with unread marks and an attachment indicator, plus a reading pane showing sender, account, and time.
 - A message count that always matches the list ("24 messages", "5 of 24 messages" while searching) and an explanation when the list is empty (no search results, offline, sync failed).
-- Message bodies are shown as clean plain text. Scripts and remote content are never loaded.
+- Messages open in their **HTML** version (layout, colors, tables, buttons, pictures) when they have one, with an **HTML | Plain text** switch above the message and a default in Settings → Mail. Plain text is shown with clickable links.
+- Pictures inside a message show offline. **Remote images** are blocked until you choose *Load images* or *Always load from this sender* (or set *Always load* in Settings → Mail); obvious tracking pixels stay blocked. Alondra1 has no image proxy, so loading remote images reveals your internet address to the image host.
+- HTML is cleaned with an allow-list and shown in an isolated WebView2 with scripts, forms, frames, downloads, and navigation turned off; links open in your browser or mail app.
+- Attachments are listed with name, type, and size, with **Open** and **Save**. Files that can run programs ask before opening.
 - Search follows the selected account and folder. Personal accounts use a full-text index (tested with 10,000 messages).
 - Sync on demand with F5 or More → Sync now. The status dot shows Up to date, Syncing…, Offline, Sync failed, Sample data, or No accounts.
 
@@ -45,7 +48,9 @@ What Alondra1 1.3.0 does today, by workspace. Each workspace has a keyboard shor
 
 **Organizing**
 
-- Archive, Delete (Del), Mark read or unread. Actions apply locally at once and are queued for the server.
+- Archive, Delete (Del), Mark read or unread, for one message or several (Shift/Ctrl to select). Actions apply locally at once and are queued for the server.
+- Narrow windows show the list and the message one at a time, with a Back button (Esc).
+- Settings → Mail: open messages as HTML or plain text, remote images (ask or always), trusted senders, row density (32 or 40 px), and pane positions.
 - POP3 accounts never import the same message twice (UIDL), and they delete from the server only when you turn that on.
 
 **Layout**

@@ -210,4 +210,9 @@ foreach ($module in "Mail", "Calendar", "To-do", "Notes", "Contacts") {
     if ($code -ne 0 -or -not (Test-Path $file)) { Fail "snapshot of $module failed ($code)" }
 }
 Note "8. snapshots of Mail, Calendar, To-do, Notes, and Contacts in $out"
+
+# The message reader on the installed copy: fixtures M01-M12 in the real WebView2 (scripts, requests, attachments).
+& (Join-Path $PSScriptRoot "check-reader.ps1") -Exe $exe 6>&1 | ForEach-Object { Add-Content -LiteralPath $result -Value "   $_" -Encoding utf8 }
+if ($LASTEXITCODE -ne 0) { Fail "reader check failed on the installed copy" }
+Note "8. reader check passed on the installed copy (fixtures M01-M12)"
 Note "PASSED"

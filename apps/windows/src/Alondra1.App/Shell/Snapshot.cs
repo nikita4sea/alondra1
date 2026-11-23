@@ -15,17 +15,72 @@ namespace Alondra1.App.Shell;
 /// </summary>
 public static class Snapshot
 {
-    public static void RenderElement(FrameworkElement root, string path)
+    /// <param name="overlays">Pictures of elements WPF cannot render itself (the WebView2 message body), drawn at their place.</param>
+    public static void RenderElement(FrameworkElement root, string path, IEnumerable<(FrameworkElement Element, BitmapSource Picture)>? overlays = null)
     {
         var scale = VisualTreeHelper.GetDpi(root);
         var bitmap = new RenderTargetBitmap(
             (int)Math.Ceiling(root.ActualWidth * scale.DpiScaleX), (int)Math.Ceiling(root.ActualHeight * scale.DpiScaleY),
             scale.PixelsPerInchX, scale.PixelsPerInchY, PixelFormats.Pbgra32);
         bitmap.Render(root);
+        BitmapSource result = bitmap;
+        if (overlays is not null)
+        {
+            var visual = new DrawingVisual();
+            using (var context = visual.RenderOpen())
+            {
+                context.DrawImage(bitmap, new System.Windows.Rect(0, 0, root.ActualWidth, root.ActualHeight));
+                foreach (var (element, picture) in overlays)
+                {
+                    if (!element.IsVisible)
+                        continue;
+                    var origin = element.TranslatePoint(new Point(0, 0), root);
+                    context.DrawImage(picture, new System.Windows.Rect(origin, new Size(element.ActualWidth, element.ActualHeight)));
+                }
+            }
+
+            var composed = new RenderTargetBitmap(bitmap.PixelWidth, bitmap.PixelHeight, scale.PixelsPerInchX, scale.PixelsPerInchY, PixelFormats.Pbgra32);
+            composed.Render(visual);
+            result = composed;
+        }
+
         var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        encoder.Frames.Add(BitmapFrame.Create(result));
         using var file = File.Create(path);
         encoder.Save(file);
+    }
+
+    /// <summary>Takes an element's area from the screen (for content WPF cannot render itself). The window must be in front.</summary>
+    public static BitmapSource? CaptureScreen(FrameworkElement element)
+    {
+        try
+        {
+            var window = Window.GetWindow(element);
+            window?.Activate();
+            var topLeft = element.PointToScreen(new Point(0, 0));
+            var bottomRight = element.PointToScreen(new Point(element.ActualWidth, element.ActualHeight));
+            var width = (int)Math.Round(bottomRight.X - topLeft.X);
+            var height = (int)Math.Round(bottomRight.Y - topLeft.Y);
+            if (width <= 0 || height <= 0)
+                return null;
+            using var bitmap = new System.Drawing.Bitmap(width, height);
+            using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+                graphics.CopyFromScreen((int)Math.Round(topLeft.X), (int)Math.Round(topLeft.Y), 0, 0, bitmap.Size);
+            using var memory = new MemoryStream();
+            bitmap.Save(memory, System.Drawing.Imaging.ImageFormat.Png);
+            memory.Position = 0;
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.StreamSource = memory;
+            image.EndInit();
+            image.Freeze();
+            return image;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or ArgumentException)
+        {
+            return null;
+        }
     }
 
     /// <summary>Opens a dialog with <paramref name="show"/>, captures it once it has rendered, then closes it.</summary>

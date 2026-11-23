@@ -1,0 +1,8 @@
+From: "Example Sender" <sender@example.com>
+To: reader@example.org
+Date: Mon, 23 Nov 2026 09:00:00 +0000
+MIME-Version: 1.0
+Subject: M05 remote
+Content-Type: text/html; charset=utf-8
+
+<html><body><img src="https://img.example.com/logo.png" alt="Example logo" width="120" height="40"><img src="https://img.example.com/hero.jpg" alt="Autumn hero" width="600" height="300"><img src="https://track.example.com/open.gif" width="1" height="1"><div style="background:url(https://img.example.com/bg.png)">Text over a background</div></body></html>

@@ -79,12 +79,64 @@ public static class SampleCatalog
         return list;
     }
 
-    public static StoredBody BodyFor(StoredMessage message) => new()
+    public static StoredBody BodyFor(StoredMessage message)
     {
-        Text = string.IsNullOrEmpty(message.Preview)
-            ? $"Hi,\n\nFollowing up on “{message.Subject}.” Let me know if you have any questions.\n\nThanks,\n{message.FromName}"
-            : message.Preview,
+        var body = new StoredBody
+        {
+            Text = string.IsNullOrEmpty(message.Preview)
+                ? $"Hi,\n\nFollowing up on “{message.Subject}.” Let me know if you have any questions.\n\nThanks,\n{message.FromName}"
+                : message.Preview,
+        };
+        if (message.Subject == "New navigation concepts")
+            body.Html = NewsletterHtml;
+        foreach (var (name, type, size) in AttachmentsFor(message.Subject))
+        {
+            body.Attachments.Add(new StoredAttachment
+            {
+                Id = $"{message.AccountId}|{message.FolderId}|{message.Uid}|{name}",
+                AccountId = message.AccountId,
+                FolderId = message.FolderId,
+                Uid = message.Uid,
+                FileName = name,
+                ContentType = type,
+                Size = size,
+            });
+        }
+
+        return body;
+    }
+
+    private static IEnumerable<(string Name, string Type, long Size)> AttachmentsFor(string subject) => subject switch
+    {
+        "Invoice for November" => [("invoice-november.pdf", "application/pdf", 48_213)],
+        "Photo album link" => [("beach.jpg", "image/jpeg", 1_204_551), ("sunset.jpg", "image/jpeg", 986_120)],
+        "Updated spreadsheet" => [("budget-2027.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 31_877)],
+        "Your order is on its way" => [("receipt.pdf", "application/pdf", 22_014)],
+        _ => [],
     };
+
+    /// <summary>A small HTML newsletter for the demo: layout, colors, a button, an embedded image, and a remote image.</summary>
+    private const string NewsletterHtml = """
+        <html><body bgcolor="#f3f2f8">
+        <table width="600" align="center" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;font-family:Segoe UI,sans-serif">
+          <tr><td style="padding:24px 28px;background:#4b4fa8;color:#ffffff;border-radius:12px 12px 0 0">
+            <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFUlEQVR4nGP4TyJgGNUwquH/sNUAAK+t/R8hxUFZAAAAAElFTkSuQmCC" width="16" height="16" alt="" style="vertical-align:middle">
+            <span style="font-size:20px;font-weight:600;vertical-align:middle">&nbsp;Design notes · November</span></td></tr>
+          <tr><td style="padding:20px 28px;color:#2a2940;font-size:14px;line-height:1.6">
+            <h2 style="margin:0 0 8px;font-size:18px">New navigation concepts</h2>
+            <p>We explored three directions for the workspace tabs. The rounded strip tested best: people found the open module faster and liked that nothing moved when switching.</p>
+            <img src="https://images.example.com/concepts/tabs-overview.png" alt="Overview of the three tab concepts" width="544" height="220">
+            <table width="100%" cellpadding="8" style="margin:12px 0;border-collapse:collapse">
+              <tr style="background:#f1f0f5"><td><b>Concept</b></td><td><b>Found the open module</b></td></tr>
+              <tr><td>Rounded strip</td><td>96%</td></tr>
+              <tr style="background:#f9f8fc"><td>Underline tabs</td><td>81%</td></tr>
+            </table>
+            <p style="text-align:center;margin:20px 0"><a href="https://example.com/design/navigation" style="background:#4b4fa8;color:#ffffff;padding:10px 18px;border-radius:8px;text-decoration:none">Open the prototype</a></p>
+            <p style="color:#5f5e7a;font-size:12px">You receive this because you are on the design list.</p>
+          </td></tr>
+        </table>
+        </body></html>
+        """;
 
     public static IReadOnlyList<StoredMessage> Query(string folder, string? account, string? search)
     {

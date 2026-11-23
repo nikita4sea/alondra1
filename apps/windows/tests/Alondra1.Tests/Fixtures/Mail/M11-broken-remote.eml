@@ -1,0 +1,8 @@
+From: "Example Sender" <sender@example.com>
+To: reader@example.org
+Date: Mon, 23 Nov 2026 09:00:00 +0000
+MIME-Version: 1.0
+Subject: M11 broken
+Content-Type: text/html; charset=utf-8
+
+<p>Before</p><img src="https://unreachable.invalid/missing.png" alt="Missing picture" width="300" height="100"><p>After</p>

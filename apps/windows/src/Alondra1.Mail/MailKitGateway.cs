@@ -164,7 +164,7 @@ public sealed class MailKitGateway : IMailGateway
             var index = await FindPopIndexAsync(account, pop, uid, cancellationToken).ConfigureAwait(false);
             var message = await pop.GetMessageAsync(index, cancellationToken).ConfigureAwait(false);
             await pop.DisconnectAsync(true, cancellationToken).ConfigureAwait(false);
-            return BodyOf(message);
+            return MimeBody.Extract(message, account.Id, folderId, uid);
         }
 
         using var client = await ConnectImapAsync(account, secrets, cancellationToken).ConfigureAwait(false);
@@ -172,11 +172,23 @@ public sealed class MailKitGateway : IMailGateway
         await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken).ConfigureAwait(false);
         var mime = await folder.GetMessageAsync(new UniqueId((uint)uid), cancellationToken).ConfigureAwait(false);
         await client.DisconnectAsync(true, cancellationToken).ConfigureAwait(false);
-        return BodyOf(mime);
+        return MimeBody.Extract(mime, account.Id, folderId, uid);
     }
 
     public async Task FetchAttachmentAsync(AccountConfig account, SecretBundle secrets, string folderId, long uid, string fileName, Stream destination, IProgress<long>? progress, CancellationToken cancellationToken)
     {
+        if (account.Incoming.Protocol == MailProtocol.Pop3)
+        {
+            using var pop = await ConnectPopAsync(account, secrets, cancellationToken).ConfigureAwait(false);
+            var index = await FindPopIndexAsync(account, pop, uid, cancellationToken).ConfigureAwait(false);
+            var message = await pop.GetMessageAsync(index, cancellationToken).ConfigureAwait(false);
+            await pop.DisconnectAsync(true, cancellationToken).ConfigureAwait(false);
+            var popPart = MimeBody.FindAttachment(message, fileName) ?? throw new InvalidOperationException("That attachment is no longer on the server.");
+            await MimeBody.WriteAsync(popPart, destination, cancellationToken).ConfigureAwait(false);
+            progress?.Report(destination.Length);
+            return;
+        }
+
         using var client = await ConnectImapAsync(account, secrets, cancellationToken).ConfigureAwait(false);
         client.Timeout = 120000;
         var folder = await client.GetFolderAsync(folderId, cancellationToken).ConfigureAwait(false);
@@ -184,14 +196,20 @@ public sealed class MailKitGateway : IMailGateway
         var summary = (await folder.FetchAsync(new[] { new UniqueId((uint)uid) }, MessageSummaryItems.BodyStructure, cancellationToken).ConfigureAwait(false)).FirstOrDefault();
         var part = summary?.Attachments.FirstOrDefault(item => string.Equals(item.FileName, fileName, StringComparison.OrdinalIgnoreCase))
             ?? summary?.BodyParts.FirstOrDefault(item => string.Equals(item.FileName, fileName, StringComparison.OrdinalIgnoreCase));
-        if (part is null)
-            throw new InvalidOperationException("That attachment is no longer on the server.");
-        var entity = await folder.GetBodyPartAsync(new UniqueId((uint)uid), part, cancellationToken).ConfigureAwait(false);
-        if (entity is MimePart mime && mime.Content is not null)
+        MimeEntity? entity;
+        if (part is not null)
+            entity = await folder.GetBodyPartAsync(new UniqueId((uint)uid), part, cancellationToken).ConfigureAwait(false);
+        else
         {
-            await mime.Content.DecodeToAsync(destination, cancellationToken).ConfigureAwait(false);
-            progress?.Report(destination.Length);
+            // Parts without a file name get a generated one ("attachment-2.pdf"); find those in the full message.
+            var message = await folder.GetMessageAsync(new UniqueId((uint)uid), cancellationToken).ConfigureAwait(false);
+            entity = MimeBody.FindAttachment(message, fileName);
         }
+
+        if (entity is null)
+            throw new InvalidOperationException("That attachment is no longer on the server.");
+        await MimeBody.WriteAsync(entity, destination, cancellationToken).ConfigureAwait(false);
+        progress?.Report(destination.Length);
 
         await client.DisconnectAsync(true, cancellationToken).ConfigureAwait(false);
     }
@@ -448,15 +466,6 @@ public sealed class MailKitGateway : IMailGateway
 
         batch.NextCheckpoint = ImapReconciler.WriteCheckpoint(mailFolder.UidValidity, batch.RemoteUids.DefaultIfEmpty(0).Max(), mailFolder.HighestModSeq);
         return batch;
-    }
-
-    private static StoredBody BodyOf(MimeMessage message)
-    {
-        var html = message.HtmlBody;
-        var text = message.TextBody;
-        if (string.IsNullOrWhiteSpace(text) && !string.IsNullOrWhiteSpace(html))
-            text = HtmlMailSanitizer.ToPlainText(html);
-        return new StoredBody { Text = text ?? "", Html = html };
     }
 
     private static MimeMessage BuildMime(OutgoingMail mail)

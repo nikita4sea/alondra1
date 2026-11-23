@@ -41,13 +41,21 @@ public partial class MainWindow : Window
         model.Todo.SearchFocusRequested += FocusSearch;
         model.Todo.PropertyChanged += Todo_PropertyChanged;
         ApplyBackground();
+        ReaderBody.HtmlFailed += reason => _model.ReportHtmlFailure(reason);
+        model.MessageStateChanged += RedrawRow;
         Loaded += async (_, _) =>
         {
+            Trace("await model.InitializeAsync();");
             await model.InitializeAsync();
+            Trace("await StartTasksAsync();");
             await StartTasksAsync();
             FillSelectors();
             UpdateStatusDot();
+            Trace("ApplyReaderColors();");
+            ApplyReaderColors();
             WriteLaunchLog();
+            if (App.Arguments.FirstOrDefault(argument => argument.StartsWith("--open-eml=", StringComparison.Ordinal)) is { } eml)
+                await OpenMessageFileAsync(eml["--open-eml=".Length..].Trim('"'));
             // Diagnostics: --account=<name> picks the Mail account; --sync syncs every account once at start (before a
             // --snapshot), as F5 would; --send-check sends between the first two manual accounts. Results go to logs\check.log.
             if (App.Arguments.FirstOrDefault(argument => argument.StartsWith("--account=", StringComparison.Ordinal)) is { } chosen)
@@ -164,6 +172,22 @@ public partial class MainWindow : Window
             Application.Current.Shutdown(_exitCode);
     }
 
+    /// <summary>Diagnostics (--trace): startup and check steps with timestamps in logs\trace.log, to find where a run stops.</summary>
+    private static void Trace(string step)
+    {
+        if (!App.Arguments.Contains("--trace"))
+            return;
+        try
+        {
+            var directory = Path.Combine(App.Services.Home, "logs");
+            Directory.CreateDirectory(directory);
+            File.AppendAllText(Path.Combine(directory, "trace.log"), $"{DateTimeOffset.Now:HH:mm:ss.fff} {step}{Environment.NewLine}");
+        }
+        catch (IOException)
+        {
+        }
+    }
+
     private static void WriteCheck(string line)
     {
         try
@@ -256,10 +280,23 @@ public partial class MainWindow : Window
         if (App.Arguments.FirstOrDefault(argument => argument.StartsWith("--height=", StringComparison.Ordinal)) is { } height
             && double.TryParse(height["--height=".Length..], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var tall))
             Height = tall;
+        // --scale=1.25|1.5|2: lay out and render at that display scale, as Windows would at 125/150/200 %.
+        if (App.Arguments.FirstOrDefault(argument => argument.StartsWith("--scale=", StringComparison.Ordinal)) is { } scaleArgument
+            && double.TryParse(scaleArgument["--scale=".Length..], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var scale)
+            && scale is >= 1 and <= 3)
+        {
+            System.Windows.Media.VisualTreeHelper.SetRootDpi(this, new DpiScale(scale, scale));
+            UpdateLayout();
+        }
+
         if (App.Arguments.FirstOrDefault(argument => argument.StartsWith("--open=", StringComparison.Ordinal)) is { } open)
             OpenWorkspace(open["--open=".Length..]);
+        // --search=<text>: the search state (for example no results).
+        if (App.Arguments.FirstOrDefault(argument => argument.StartsWith("--search=", StringComparison.Ordinal)) is { } search)
+            SearchBox.Text = search["--search=".Length..];
         if (App.Arguments.FirstOrDefault(argument => argument.StartsWith("--select=", StringComparison.Ordinal)) is { } select)
             _model.Todo.Select(select["--select=".Length..]);
+            Trace("await Task.Delay(1500);");
         await Task.Delay(1500);
         if (App.Arguments.FirstOrDefault(argument => argument.StartsWith("--detail", StringComparison.Ordinal)) is not null && _model.Todo.Items.FirstOrDefault() is { } first)
         {
@@ -274,6 +311,7 @@ public partial class MainWindow : Window
                 "compose" => () => Dialogs.ShowCompose(this, _model, null),
                 "settings" => () => Dialogs.ShowSettings(this, _model),
                 "background" => () => Dialogs.ShowSettings(this, _model, 1),
+                "mail" => () => Dialogs.ShowSettings(this, _model, 2),
                 "account" => () => Dialogs.ShowAccount(this, _model, null),
                 "welcome" => () => Dialogs.ShowWelcome(this, _model),
                 "list" => () => Alondra1.App.Tasks.TodoDialogs.Prompt(this, "New list", "Name (emoji welcome)", "Untitled list"),
@@ -284,11 +322,24 @@ public partial class MainWindow : Window
         }
         else
         {
-            Shell.Snapshot.RenderElement((FrameworkElement)Content, path);
-            File.WriteAllText(path + ".txt", $"header {Header.ActualHeight:0} toolbar {Toolbar.ActualHeight:0} window {ActualWidth:0}x{ActualHeight:0}; {Shell.Snapshot.Measure(this)}"
-                + $"{Environment.NewLine}account={_model.SelectedAccount}{Environment.NewLine}count={_model.CountText}{Environment.NewLine}connection={_model.ConnectionLabel}");
+            Trace("var overlays = new List<(Frame");
+            var overlays = new List<(FrameworkElement, System.Windows.Media.Imaging.BitmapSource)>();
+            // The message body is drawn by WebView2 outside WPF's own rendering; take it from the screen instead.
+            if (_model.IsMail && ReaderBody.Surface is FrameworkElement surface && surface.IsVisible
+                && (await ReaderBody.CaptureAsync() ?? Shell.Snapshot.CaptureScreen(surface)) is { } picture)
+                overlays.Add((surface, picture));
+            Trace("Shell.Snapshot.RenderElement((");
+            Shell.Snapshot.RenderElement((FrameworkElement)Content, path, overlays);
+            var geometry = Shell.GeometryCheck.Run(new Shell.GeometryCheck.Parts(this, Header, Toolbar, ContentArea,
+                _model.IsMail && Dock.Single == Alondra1.Core.Layout.SinglePane.None ? ListPane : null, _model.IsMail && Dock.Single == Alondra1.Core.Layout.SinglePane.None ? ReaderPane : null,
+                _model.IsMail && Dock.Single != Alondra1.Core.Layout.SinglePane.Reader ? ListColumnHeader : null, _model.IsMail ? MessageList : null));
+            var displayScale = System.Windows.Media.VisualTreeHelper.GetDpi(this).DpiScaleX;
+            File.WriteAllText(path + ".txt", $"header {Header.ActualHeight:0} toolbar {Toolbar.ActualHeight:0} window {ActualWidth:0}x{ActualHeight:0} scale {displayScale:0.##}; {Shell.Snapshot.Measure(this)}"
+                + $"{Environment.NewLine}account={_model.SelectedAccount}{Environment.NewLine}count={_model.CountText}{Environment.NewLine}connection={_model.ConnectionLabel}"
+                + $"{Environment.NewLine}single={Dock.Single}{Environment.NewLine}" + string.Join(Environment.NewLine, geometry));
         }
 
+        Trace("snapshot written");
         if (App.Arguments.Contains("--exit"))
             ExitAfterDiagnostics();
     }
@@ -533,7 +584,79 @@ public partial class MainWindow : Window
     {
         if (_filling)
             return;
+        _model.SetSelection(MessageList.SelectedItems.OfType<StoredMessage>().ToList());
         _model.SelectMessage(MessageList.SelectedItem as StoredMessage);
+        if (MessageList.SelectedItem is null && _readerOpen)
+            ShowList();
+    }
+
+    // ---------- One pane at a time ----------
+
+    private bool _readerOpen;
+    private double _listOffset;
+
+    private void Dock_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateSinglePane();
+
+    /// <summary>Shows list and reader side by side when both fit (420 / 440 px), otherwise one at a time.</summary>
+    private void UpdateSinglePane()
+    {
+        var fits = Alondra1.Core.Layout.LayoutArranger.FitsSplit(_model.PaneFoldersDock, _model.ReadingDock, Dock.ActualWidth, Dock.ActualHeight, _model.FolderBreadth);
+        var single = fits ? Alondra1.Core.Layout.SinglePane.None
+            : _readerOpen && _model.SelectedMessage is not null ? Alondra1.Core.Layout.SinglePane.Reader : Alondra1.Core.Layout.SinglePane.List;
+        if (Dock.Single != single)
+        {
+            if (single == Alondra1.Core.Layout.SinglePane.Reader)
+                _listOffset = FindScrollViewer(MessageList)?.VerticalOffset ?? 0;
+            Dock.Single = single;
+            if (single == Alondra1.Core.Layout.SinglePane.List && _listOffset > 0)
+                Dispatcher.InvokeAsync(() => FindScrollViewer(MessageList)?.ScrollToVerticalOffset(_listOffset), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        _model.SetSinglePane(!fits, single == Alondra1.Core.Layout.SinglePane.Reader);
+    }
+
+    private void ShowReader()
+    {
+        if (_model.SelectedMessage is null)
+            return;
+        _readerOpen = true;
+        UpdateSinglePane();
+        if (_model.IsSinglePane)
+            Dispatcher.InvokeAsync(() => ReaderBackButton.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void ShowList()
+    {
+        _readerOpen = false;
+        UpdateSinglePane();
+        if (MessageList.ItemContainerGenerator.ContainerFromItem(MessageList.SelectedItem) is ListBoxItem item)
+            Dispatcher.InvokeAsync(() => item.Focus(), System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    private void ReaderBack_Click(object sender, RoutedEventArgs e) => ShowList();
+
+    /// <summary>Clicking a row opens it; in one-pane mode that switches to the message.</summary>
+    private void MessageList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.None || e.OriginalSource is not DependencyObject source)
+            return;
+        for (var node = source; node is not null && node != MessageList; node = System.Windows.Media.VisualTreeHelper.GetParent(node))
+        {
+            if (node is ListBoxItem)
+            {
+                Dispatcher.InvokeAsync(ShowReader, System.Windows.Threading.DispatcherPriority.Input);
+                return;
+            }
+        }
+    }
+
+    private void MessageList_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            ShowReader();
+            e.Handled = true;
+        }
     }
 
     private void MessageList_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -598,7 +721,9 @@ public partial class MainWindow : Window
         }
 
         menu.Items.Add(Command("Sync now", "Refresh", _model.SyncCommand, "F5"));
-        menu.Items.Add(Command("Show plain text", "Notes", null, null, () => PlainBody.Visibility = Visibility.Visible));
+        menu.Items.Add(_model.ShowingHtml
+            ? Command("Show plain text", "Notes", _model.ShowPlainCommand)
+            : Command("Show HTML", "Mail", _model.ShowHtmlCommand));
         menu.PlacementTarget = MailMoreButton;
         menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
         menu.IsOpen = true;
@@ -627,7 +752,121 @@ public partial class MainWindow : Window
 
     private void Note_LostFocus(object sender, RoutedEventArgs e) => _model.SaveNoteCommand.Execute(null);
 
-    private void PlainText_Click(object sender, RoutedEventArgs e) => PlainBody.Visibility = Visibility.Visible;
+    /// <summary>After Settings → Mail changed density or pane positions: sync View settings and redraw the list.</summary>
+    public void RefreshLayoutSelectors()
+    {
+        FillSelectors();
+        MessageList.Items.Refresh();
+        MessageList_SizeChanged(MessageList, null!);
+    }
+
+    /// <summary>Re-applies a row's template so a changed read state shows (messages are plain data objects).</summary>
+    private void RedrawRow(StoredMessage message)
+    {
+        if (MessageList.ItemContainerGenerator.ContainerFromItem(message) is ListBoxItem item)
+        {
+            var content = item.Content;
+            item.Content = null;
+            item.Content = content;
+        }
+    }
+
+    // ---------- Reader ----------
+
+    /// <summary>Plain-text pages follow the theme: transparent over the pane, theme text and link colors.</summary>
+    private void ApplyReaderColors()
+    {
+        static string Hex(object? brush) => brush is System.Windows.Media.SolidColorBrush solid
+            ? $"#{solid.Color.R:X2}{solid.Color.G:X2}{solid.Color.B:X2}"
+            : "#808080";
+        _model.PlainColors = new Alondra1.Core.Html.MailHtml.PlainColors("transparent", Hex(TryFindResource("TextBrush")), Hex(TryFindResource("BlueBrush")));
+        _model.RenderReader();
+    }
+
+    private async void OpenAttachment_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: AttachmentRow row })
+            return;
+        if (Alondra1.Core.Mail.ReaderPolicy.IsRisky(row.FileName)
+            && Dialogs.Alert(this, $"“{row.FileName}” can run programs on this PC. Open it only if you trust the sender.\n\nOpen it anyway?", "Alondra1", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+            return;
+        try
+        {
+            // Opened from a private temporary folder; the file keeps its own name so Windows picks the right app.
+            var folder = Path.Combine(Path.GetTempPath(), "alondra1-open", Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(folder);
+            var path = Path.Combine(folder, SafeFileName(row.FileName));
+            await using (var file = File.Create(path))
+                await _model.SaveAttachmentAsync(row, file);
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException or System.ComponentModel.Win32Exception or System.Net.Sockets.SocketException or MailKit.ProtocolException or MailKit.Security.AuthenticationException)
+        {
+            Dialogs.Alert(this, $"Could not open “{row.FileName}”. {ex.Message}", "Alondra1");
+        }
+    }
+
+    private async void SaveAttachment_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: AttachmentRow row })
+            return;
+        var dialog = new Microsoft.Win32.SaveFileDialog { FileName = SafeFileName(row.FileName), Filter = "All files|*.*" };
+        if (dialog.ShowDialog(this) != true)
+            return;
+        try
+        {
+            await using var file = File.Create(dialog.FileName);
+            await _model.SaveAttachmentAsync(row, file);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException or System.Net.Sockets.SocketException or MailKit.ProtocolException or MailKit.Security.AuthenticationException)
+        {
+            Dialogs.Alert(this, $"Could not save “{row.FileName}”. {ex.Message}", "Alondra1");
+        }
+    }
+
+    private static string SafeFileName(string name)
+    {
+        var cleaned = new string(Path.GetFileName(name).Select(ch => Path.GetInvalidFileNameChars().Contains(ch) ? '_' : ch).ToArray()).Trim();
+        return string.IsNullOrEmpty(cleaned) ? "attachment" : cleaned;
+    }
+
+    /// <summary>
+    /// Diagnostics (--open-eml=&lt;file&gt;): shows a message file through the normal reader pipeline and logs what the page
+    /// attempted (title changes from scripts, blocked requests and navigations) to logs\check.log. Exit code 6 when
+    /// active content ran or a request escaped the image policy.
+    /// </summary>
+    private async Task OpenMessageFileAsync(string path)
+    {
+        OpenWorkspace("Mail");
+        try
+        {
+            Trace("_model.ShowMessageFile(path);");
+            _model.ShowMessageFile(path);
+        }
+        catch (Exception ex) when (ex is IOException or FormatException or UnauthorizedAccessException)
+        {
+            WriteCheck($"reader: {Path.GetFileName(path)} could not be read ({ex.GetType().Name})");
+            _exitCode = 6;
+            return;
+        }
+
+        if (App.Arguments.Contains("--load-images"))
+            _model.LoadImagesCommand.Execute(null);
+        MessageList.SelectedItem = _model.SelectedMessage;
+        ShowReader();
+            Trace("var loaded = await ReaderBody.");
+        var loaded = await ReaderBody.WaitForDocumentAsync(TimeSpan.FromSeconds(15));
+        await Task.Delay(1500); // let image requests and any (blocked) script effects happen
+            Trace("var title = ReaderBody.Documen");
+        var title = ReaderBody.DocumentTitle;
+        var ranScript = title.Contains("pwned", StringComparison.OrdinalIgnoreCase);
+        var escaped = !_model.ReaderAllowRemote && ReaderBody.RemoteRequests > 0;
+        WriteCheck($"reader: {Path.GetFileName(path)} loaded={loaded} html={_model.ShowingHtml} blockedImages={_model.BlockedImages} "
+            + $"remoteRequests={ReaderBody.RemoteRequests} blockedRequests={ReaderBody.BlockedRequests} blockedNavigations={ReaderBody.BlockedNavigations} "
+            + $"attachments={_model.Attachments.Count} scriptRan={ranScript}");
+        if (ranScript || escaped || !loaded)
+            _exitCode = 6;
+    }
 
     // ---------- Keyboard ----------
 
@@ -669,12 +908,12 @@ public partial class MainWindow : Window
             _model.NewMailCommand.Execute(null);
             e.Handled = true;
         }
-        else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.R)
+        else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.R && !IsTyping())
         {
             _model.ReplyCommand.Execute(null);
             e.Handled = true;
         }
-        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.F)
+        else if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && e.Key == Key.F && !IsTyping())
         {
             _model.ForwardCommand.Execute(null);
             e.Handled = true;
@@ -682,6 +921,11 @@ public partial class MainWindow : Window
         else if (e.Key == Key.F5)
         {
             _model.SyncCommand.Execute(null);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape && _model.ShowBackButton && !IsTyping())
+        {
+            ShowList();
             e.Handled = true;
         }
         else if (e.Key == Key.Delete && MessageList.IsKeyboardFocusWithin)
@@ -692,4 +936,7 @@ public partial class MainWindow : Window
     }
 
     private void ShowCompose(OutgoingMail? mail) => Dialogs.ShowCompose(this, _model, mail);
+
+    /// <summary>Mail shortcuts never act while the user is typing in a text box (search, note, task title).</summary>
+    private static bool IsTyping() => Keyboard.FocusedElement is TextBox or PasswordBox or System.Windows.Controls.Primitives.TextBoxBase;
 }

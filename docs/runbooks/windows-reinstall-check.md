@@ -38,3 +38,12 @@ The summary and the snapshots go to `apps/windows/artifacts/reinstall/<time>/`. 
 | `--sync`, `--send-check` | One sync of every account; send and receive between the first two manual accounts. The results go to `logs\check.log`. |
 | `--account=<name>` | Selects the Mail account (it is remembered, like a choice in View settings). |
 | `--exit` | Closes when done. The exit code is not 0 if a step failed: 2 for an invalid configuration, 3 for passwords, 4 for sync, 5 for send-check. |
+
+## Related checks
+
+| Script | What it checks |
+| --- | --- |
+| `scripts/check-reader.ps1 [-Exe <path>] [-Only M05]` | Renders the mail fixtures M01–M12 in the real WebView2 (`--open-eml`). It fails when a script ran, when a remote request was made while images were blocked, or when the format, blocked images, or attachments differ from what the fixture expects. The reinstall check runs it against the installed copy. |
+| `scripts/snapshot-matrix.ps1 [-Quick]` | Demo snapshots at 1280 × 800, 1600 × 900, 2048 × 1080, and 800 × 900, in light and dark, at 100 % and 125 % scale (150 % and 200 % spot checks). It covers these states: inbox, plain text, rich newsletter, blocked images, no search results, and Settings. Every snapshot writes a geometry report (heights, insets, toolbar center line, overlaps, gutter, From column), and any `FAIL` line fails the run. Hover states are not captured, because snapshots cannot hold a mouse position. |
+
+Diagnostic switches used by these scripts: `--open-eml=<file>`, `--load-images`, `--scale=<factor>`, `--search=<text>`, `--trace` (steps written to `logs\trace.log`).

@@ -110,7 +110,8 @@ public sealed partial class MainViewModel : ObservableObject
     public DockEdge ReadingDock => _services.Config.Layout.ReadingDock;
     public double FolderBreadth => LayoutArranger.BreadthFor(FoldersDock, _services.Config.Layout.FolderBreadthSide, _services.Config.Layout.FolderBreadthBand);
     public double ReadingBreadth => LayoutArranger.BreadthFor(ReadingDock, _services.Config.Layout.ReadingBreadthSide, _services.Config.Layout.ReadingBreadthBand);
-    public double RowHeight => _services.Config.Appearance.Density == Density.Compact ? 26 : 34;
+    /// <summary>Message row height: 32 px compact (default), 40 px comfortable (client spec §6).</summary>
+    public double RowHeight => _services.Config.Appearance.Density == Density.Compact ? 32 : 40;
     public string DensityLabel => _services.Config.Appearance.Density.ToString();
     public StoredMessage? SelectedMessage { get; private set; }
     public string ReaderStatus { get; private set; } = "Reading pane";
@@ -133,8 +134,187 @@ public sealed partial class MainViewModel : ObservableObject
     public bool NoContacts { get; private set; }
     public string OrganizerNotice { get; private set; } = "";
     public string NewTaskTitle { get; set; } = "";
-    public bool PlainTextPreferred { get; private set; } = true;
-    public string? CurrentHtml { get; private set; }
+    // ---------- Reader (client spec §4) ----------
+
+    private StoredBody? _body;
+    private bool? _htmlChoice;
+    private bool _imagesLoadedForMessage;
+    private string? _htmlFailure;
+    private MimeKit.MimeMessage? _fixture;
+
+    public ObservableCollection<AttachmentRow> Attachments { get; } = [];
+    public bool HasAttachments => Attachments.Count > 0;
+    public bool HasHtml => !string.IsNullOrWhiteSpace(_body?.Html) && _htmlFailure is null;
+    public bool ShowingHtml => ReaderPolicy.OpenAsHtml(_services.Config.Reading, HasHtml, _htmlChoice);
+    public bool ShowingPlain => !ShowingHtml;
+    public string ReaderTo { get; private set; } = "";
+    public bool HasReaderTo => !string.IsNullOrWhiteSpace(ReaderTo);
+    public string ReaderMeta { get; private set; } = "";
+
+    /// <summary>The document the reader shows: sanitized HTML, or the plain text as a linkified page.</summary>
+    public string ReaderDocument { get; private set; } = "";
+    public bool ReaderAllowRemote { get; private set; }
+    public int BlockedImages { get; private set; }
+    public bool ShowImageBar => ShowingHtml && BlockedImages > 0 && !ReaderAllowRemote;
+    public string ImageBarText => BlockedImages == 1
+        ? "1 remote image is blocked to protect your privacy."
+        : $"{BlockedImages} remote images are blocked to protect your privacy.";
+    public string TrustSenderLabel => SelectedMessage is { FromAddress.Length: > 0 } message ? $"Always load from {message.FromAddress}" : "Always load from this sender";
+    public string? HtmlFailure => _htmlFailure;
+    public bool ShowHtmlFailure => _htmlFailure is not null && !string.IsNullOrWhiteSpace(_body?.Html);
+
+    public IRelayCommand ShowHtmlCommand => _showHtml ??= new RelayCommand(() => ChooseFormat(html: true), () => HasHtml);
+    public IRelayCommand ShowPlainCommand => _showPlain ??= new RelayCommand(() => ChooseFormat(html: false));
+    public IRelayCommand LoadImagesCommand => _loadImages ??= new RelayCommand(() => { _imagesLoadedForMessage = true; RenderReader(); });
+    public IRelayCommand TrustSenderCommand => _trustSender ??= new RelayCommand(TrustSender);
+    private IRelayCommand? _showHtml;
+    private IRelayCommand? _showPlain;
+    private IRelayCommand? _loadImages;
+    private IRelayCommand? _trustSender;
+
+    /// <summary>Theme colors for plain-text documents; set by the window from the current theme.</summary>
+    public Alondra1.Core.Html.MailHtml.PlainColors PlainColors { get; set; } = new("transparent", "#2a2940", "#4b4fa8");
+
+    /// <summary>Switches between HTML and plain text for this message only; no re-fetch.</summary>
+    public void ChooseFormat(bool html)
+    {
+        _htmlChoice = html;
+        RenderReader();
+    }
+
+    private void TrustSender()
+    {
+        if (SelectedMessage is null || IsDemo && _fixture is null)
+        {
+            _imagesLoadedForMessage = true;
+            RenderReader();
+            return;
+        }
+
+        if (ReaderPolicy.Trust(_services.Config.Reading, SelectedMessage.FromAddress))
+            SaveConfig();
+        RenderReader();
+    }
+
+    /// <summary>The view reports that HTML could not be shown; the reader switches to plain text and says so.</summary>
+    public void ReportHtmlFailure(string reason)
+    {
+        if (_htmlFailure is not null)
+            return;
+        _htmlFailure = reason;
+        RenderReader();
+    }
+
+    /// <summary>Builds the reader document for the current message, format, and image policy.</summary>
+    public void RenderReader()
+    {
+        if (_body is null)
+        {
+            ReaderDocument = Alondra1.Core.Html.MailHtml.PlainDocument(ReaderBody, PlainColors);
+            ReaderAllowRemote = false;
+            BlockedImages = 0;
+        }
+        else if (ShowingHtml)
+        {
+            ReaderAllowRemote = ReaderPolicy.AllowRemoteImages(_services.Config.Reading, SelectedMessage?.FromAddress, _imagesLoadedForMessage);
+            var result = Alondra1.Core.Html.MailHtml.Render(_body.Html, new Alondra1.Core.Html.MailRenderOptions { AllowRemoteImages = ReaderAllowRemote });
+            if (result.Failed)
+            {
+                // Diagnostic without content: the reason names the problem, never the message text.
+                Debug.WriteLine("Reader: HTML not shown: " + result.FailureReason);
+                _htmlFailure = "Unable to display HTML.";
+                RenderReader();
+                return;
+            }
+
+            ReaderDocument = result.Document;
+            BlockedImages = result.BlockedRemoteImages;
+        }
+        else
+        {
+            ReaderDocument = Alondra1.Core.Html.MailHtml.PlainDocument(_body.Text, PlainColors);
+            ReaderAllowRemote = false;
+            BlockedImages = 0;
+        }
+
+        foreach (var name in new[]
+        {
+            nameof(ReaderDocument), nameof(ReaderAllowRemote), nameof(BlockedImages), nameof(ShowImageBar), nameof(ImageBarText), nameof(TrustSenderLabel),
+            nameof(HasHtml), nameof(ShowingHtml), nameof(ShowingPlain), nameof(HtmlFailure), nameof(ShowHtmlFailure), nameof(ReaderBody),
+        })
+            OnPropertyChanged(name);
+        ShowHtmlCommand.NotifyCanExecuteChanged();
+    }
+
+    private void SetBody(StoredBody? body, string? recipients = null)
+    {
+        _body = body;
+        if (body is not null)
+            ReaderBody = body.Text;
+        if (!string.IsNullOrWhiteSpace(recipients))
+            ReaderTo = "To " + recipients;
+        Attachments.Clear();
+        foreach (var attachment in body?.Attachments ?? [])
+            Attachments.Add(new AttachmentRow(attachment));
+        OnPropertyChanged(nameof(HasAttachments));
+        OnPropertyChanged(nameof(ReaderTo));
+        OnPropertyChanged(nameof(HasReaderTo));
+        RenderReader();
+    }
+
+    /// <summary>Writes an attachment to <paramref name="destination"/>: from the saved copy when there is one, otherwise from the server.</summary>
+    public async Task SaveAttachmentAsync(AttachmentRow row, Stream destination)
+    {
+        var source = row.Source;
+        if (_fixture is not null)
+        {
+            var entity = Alondra1.Mail.MimeBody.FindAttachment(_fixture, source.FileName) ?? throw new InvalidOperationException("That attachment is not in the message.");
+            await Alondra1.Mail.MimeBody.WriteAsync(entity, destination, CancellationToken.None).ConfigureAwait(true);
+            return;
+        }
+
+        if (IsDemo)
+            throw new InvalidOperationException("Sample messages have no files to open or save.");
+        if (!string.IsNullOrEmpty(source.CacheRelativePath) && File.Exists(_services.Files.Resolve(source.CacheRelativePath)))
+        {
+            await using var cached = File.OpenRead(_services.Files.Resolve(source.CacheRelativePath));
+            await cached.CopyToAsync(destination).ConfigureAwait(true);
+            return;
+        }
+
+        var account = _services.Config.Accounts.FirstOrDefault(item => item.Id == source.AccountId)
+            ?? throw new InvalidOperationException("The account of this message was removed.");
+        var secrets = await _services.Secrets.LoadAsync(account.Id, CancellationToken.None).ConfigureAwait(true);
+        await _services.Mail.FetchAttachmentAsync(account, secrets, source.FolderId, source.Uid, source.FileName, destination, null, CancellationToken.None).ConfigureAwait(true);
+    }
+
+    /// <summary>Diagnostics (--open-eml): shows a message file in the reader through the normal pipeline.</summary>
+    public void ShowMessageFile(string path)
+    {
+        var message = MimeKit.MimeMessage.Load(path);
+        _fixture = message;
+        var from = message.From.Mailboxes.FirstOrDefault();
+        var stored = new StoredMessage
+        {
+            AccountId = "file",
+            AccountName = "File",
+            FolderId = "Inbox",
+            Uid = 1,
+            Subject = message.Subject ?? "",
+            FromName = string.IsNullOrWhiteSpace(from?.Name) ? from?.Address ?? "" : from.Name,
+            FromAddress = from?.Address ?? "",
+            ReceivedUtc = message.Date,
+            TimeLabel = MailText.FormatTime(message.Date, DateTimeOffset.Now),
+            Availability = ItemAvailability.Downloaded,
+            LocalOnly = true,
+        };
+        Messages.Clear();
+        Messages.Add(stored);
+        _unfilteredTotal = 1;
+        SelectMessage(stored);
+        SetBody(Alondra1.Mail.MimeBody.Extract(message, "file", "Inbox", 1), string.Join(", ", message.To.Mailboxes.Select(item => item.Address)));
+        RaiseListState();
+    }
 
     public AppConfig Config => _services.Config;
 
@@ -311,24 +491,44 @@ public sealed partial class MainViewModel : ObservableObject
 
     public void SelectMessage(StoredMessage? message)
     {
+        // Selecting the message that is already open (the list echoing a selection) keeps its body, format, and images.
+        if (message is not null && ReferenceEquals(message, SelectedMessage) && _body is not null)
+            return;
         SelectedMessage = message;
+        // A new message starts in the default format with remote images blocked (unless allowed by settings).
+        _htmlChoice = null;
+        _imagesLoadedForMessage = false;
+        _htmlFailure = null;
+        _body = null;
+        ReaderTo = "";
+        Attachments.Clear();
         if (message is null)
         {
             ReaderStatus = "Reading pane";
             ReaderSubject = "No message selected";
             ReaderSender = "";
+            ReaderMeta = "";
             ReaderBody = "";
-            CurrentHtml = null;
         }
         else
         {
             ReaderSubject = message.Subject;
-            ReaderSender = $"{message.FromName} · {message.AccountName} · {message.TimeLabel}";
+            ReaderSender = string.IsNullOrWhiteSpace(message.FromAddress) || message.FromName == message.FromAddress
+                ? message.FromName
+                : $"{message.FromName} <{message.FromAddress}>";
+            ReaderMeta = $"{message.AccountName} · {message.ReceivedUtc.ToLocalTime():ddd d MMM yyyy, HH:mm}";
+            ReaderTo = string.IsNullOrWhiteSpace(message.Recipients) ? "" : "To " + message.Recipients;
             ReaderStatus = message.SendState ?? AvailabilityLabel(message);
             ReaderBody = string.IsNullOrWhiteSpace(message.Preview) ? "" : message.Preview;
-            CurrentHtml = null;
-            _ = LoadBodyAsync(message);
+            if (_fixture is null || message.AccountId != "file")
+                _ = LoadBodyAsync(message);
         }
+
+        OnPropertyChanged(nameof(HasAttachments));
+        OnPropertyChanged(nameof(ReaderMeta));
+        OnPropertyChanged(nameof(ReaderTo));
+        OnPropertyChanged(nameof(HasReaderTo));
+        RenderReader();
 
         ReplyCommand.NotifyCanExecuteChanged();
         ReplyAllCommand.NotifyCanExecuteChanged();
@@ -617,6 +817,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         _unfilteredTotal = total;
         _selectionCount = 0;
+        _selection = [];
         Messages.Clear();
         foreach (var message in found)
             Messages.Add(message);
@@ -673,7 +874,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (IsDemo)
         {
-            ReaderBody = SampleCatalog.BodyFor(message).Text;
+            SetBody(SampleCatalog.BodyFor(message));
             RaiseReader();
             return;
         }
@@ -681,83 +882,135 @@ public sealed partial class MainViewModel : ObservableObject
         var account = _services.Config.Accounts.FirstOrDefault(item => item.Id == message.AccountId);
         if (account is null)
             return;
-        if (account.Mode == AccountMode.Personal)
+        StoredBody? body;
+        var key = new MessageKey(message.AccountId, message.FolderId, message.Uid);
+        try
         {
-            var body = await _services.Store.GetBodyAsync(new MessageKey(message.AccountId, message.FolderId, message.Uid), CancellationToken.None).ConfigureAwait(true);
-            if (body is null)
-                return;
-            ReaderBody = body.Text;
-            CurrentHtml = body.Html;
-        }
-        else
-        {
-            var cached = _services.Cache.GetBody(new MessageKey(message.AccountId, message.FolderId, message.Uid));
-            if (cached is null && message.Uid > 0)
+            if (account.Mode == AccountMode.Personal)
             {
-                var secrets = await _services.Secrets.LoadAsync(account.Id, CancellationToken.None).ConfigureAwait(true);
-                cached = await _services.Mail.FetchBodyAsync(account, secrets, message.FolderId, message.Uid, CancellationToken.None).ConfigureAwait(true);
-                _services.Cache.SetBody(new MessageKey(message.AccountId, message.FolderId, message.Uid), cached);
+                body = await _services.Store.GetBodyAsync(key, CancellationToken.None).ConfigureAwait(true);
+                if (body is not null)
+                    body.Attachments = (await _services.Store.ListAttachmentsAsync(key, CancellationToken.None).ConfigureAwait(true)).ToList();
             }
-
-            if (cached is not null)
+            else
             {
-                ReaderBody = cached.Text;
-                CurrentHtml = cached.Html;
+                body = _services.Cache.GetBody(key);
+                if (body is null && message.Uid > 0)
+                {
+                    var secrets = await _services.Secrets.LoadAsync(account.Id, CancellationToken.None).ConfigureAwait(true);
+                    body = await _services.Mail.FetchBodyAsync(account, secrets, message.FolderId, message.Uid, CancellationToken.None).ConfigureAwait(true);
+                    _services.Cache.SetBody(key, body);
+                }
             }
         }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or System.Net.Sockets.SocketException or MailKit.ServiceNotConnectedException or MailKit.Security.AuthenticationException or MailKit.ProtocolException)
+        {
+            // The preview stays; the reader says the full message could not be loaded (no message content is logged).
+            ReaderStatus = "Could not load the full message: " + ex.GetType().Name;
+            RaiseReader();
+            return;
+        }
 
+        // The user may have moved on while the body loaded.
+        if (!ReferenceEquals(SelectedMessage, message))
+            return;
+        if (body is not null)
+            SetBody(body);
         RaiseReader();
     }
 
     private async Task DeleteAsync() => await MoveSpecialAsync("Trash");
 
+    /// <summary>The selected rows (two or more with Shift/Ctrl); actions apply to all of them.</summary>
+    private IReadOnlyList<StoredMessage> _selection = [];
+
+    /// <summary>Called by the list with every selected row; the reader keeps showing the focused one.</summary>
+    public void SetSelection(IReadOnlyList<StoredMessage> selection)
+    {
+        _selection = selection;
+        SetSelectionCount(selection.Count);
+    }
+
+    private IReadOnlyList<StoredMessage> ActionTargets() =>
+        _selection.Count > 1 ? _selection.ToList() : SelectedMessage is null ? [] : [SelectedMessage];
+
     private async Task MoveSpecialAsync(string folder)
     {
-        var message = SelectedMessage;
-        if (message is null)
+        var targets = ActionTargets();
+        if (targets.Count == 0)
             return;
         if (IsDemo)
         {
-            Messages.Remove(message);
-            _unfilteredTotal = Math.Max(0, (_unfilteredTotal ?? 1) - 1);
+            foreach (var message in targets)
+                Messages.Remove(message);
+            _unfilteredTotal = Math.Max(0, (_unfilteredTotal ?? targets.Count) - targets.Count);
+            _selection = [];
+            _selectionCount = 0;
             SelectMessage(Messages.FirstOrDefault());
             RaiseListState();
             return;
         }
 
-        var account = _services.Config.Accounts.FirstOrDefault(item => item.Id == message.AccountId);
-        if (account is null)
-            return;
-        var command = new RemoteMailCommand
+        foreach (var message in targets)
         {
-            Kind = folder == "Trash" ? MailCommandKind.Delete : MailCommandKind.Archive,
-            FolderId = message.FolderId,
-            Uid = message.Uid,
-            DestinationFolderId = ResolveFolder(account, folder),
-        };
-        await _services.Sync.ApplyLocalCommandAsync(account, command, CancellationToken.None).ConfigureAwait(true);
+            var account = _services.Config.Accounts.FirstOrDefault(item => item.Id == message.AccountId);
+            if (account is null)
+                continue;
+            var command = new RemoteMailCommand
+            {
+                Kind = folder == "Trash" ? MailCommandKind.Delete : MailCommandKind.Archive,
+                FolderId = message.FolderId,
+                Uid = message.Uid,
+                DestinationFolderId = ResolveFolder(account, folder),
+            };
+            await _services.Sync.ApplyLocalCommandAsync(account, command, CancellationToken.None).ConfigureAwait(true);
+        }
+
+        _selection = [];
         await ReloadMessagesAsync().ConfigureAwait(true);
     }
 
     private async Task ToggleReadAsync()
     {
-        var message = SelectedMessage;
-        if (message is null)
+        var targets = ActionTargets();
+        if (targets.Count == 0)
             return;
-        message.IsUnread = !message.IsUnread;
-        if (!IsDemo)
+        // Several rows: mark all read when any is unread, otherwise all unread (like other mail apps).
+        var markRead = targets.Count > 1 ? targets.Any(message => message.IsUnread) : targets[0].IsUnread;
+        foreach (var message in targets)
         {
-            var account = _services.Config.Accounts.First(item => item.Id == message.AccountId);
-            await _services.Sync.ApplyLocalCommandAsync(account, new RemoteMailCommand
+            message.IsUnread = !markRead;
+            if (!IsDemo && _services.Config.Accounts.FirstOrDefault(item => item.Id == message.AccountId) is { } account)
             {
-                Kind = MailCommandKind.SetRead,
-                FolderId = message.FolderId,
-                Uid = message.Uid,
-                Value = !message.IsUnread,
-            }, CancellationToken.None).ConfigureAwait(true);
+                await _services.Sync.ApplyLocalCommandAsync(account, new RemoteMailCommand
+                {
+                    Kind = MailCommandKind.SetRead,
+                    FolderId = message.FolderId,
+                    Uid = message.Uid,
+                    Value = markRead,
+                }, CancellationToken.None).ConfigureAwait(true);
+            }
+
+            MessageStateChanged?.Invoke(message);
         }
 
-        SelectMessage(message);
+        RaiseReader();
+    }
+
+    // ---------- One pane at a time (client spec §5.1) ----------
+
+    /// <summary>True when list and reader are shown one at a time; the reader then has a Back button.</summary>
+    public bool IsSinglePane { get; private set; }
+    public bool ShowBackButton { get; private set; }
+
+    public void SetSinglePane(bool single, bool readerShown)
+    {
+        if (IsSinglePane == single && ShowBackButton == (single && readerShown))
+            return;
+        IsSinglePane = single;
+        ShowBackButton = single && readerShown;
+        OnPropertyChanged(nameof(IsSinglePane));
+        OnPropertyChanged(nameof(ShowBackButton));
     }
 
     private void LoadOrganizerDemoOrEmpty()
@@ -1083,6 +1336,9 @@ public sealed partial class MainViewModel : ObservableObject
         ConnectionChanged?.Invoke();
     }
 
+    /// <summary>Raised when a message's own state (read or unread) changed, so the list can redraw that row.</summary>
+    public event Action<StoredMessage>? MessageStateChanged;
+
     /// <summary>Raised when the connection state changes, so the view can recolor the status dot.</summary>
     public event Action? ConnectionChanged;
 
@@ -1144,8 +1400,8 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ReaderSubject));
         OnPropertyChanged(nameof(ReaderSender));
         OnPropertyChanged(nameof(ReaderBody));
-        OnPropertyChanged(nameof(CurrentHtml));
-        OnPropertyChanged(nameof(PlainTextPreferred));
+        OnPropertyChanged(nameof(ReaderMeta));
+        OnPropertyChanged(nameof(HasAttachments));
     }
 
     public void ConfigStoreSave() => SaveConfig();
@@ -1204,6 +1460,22 @@ public sealed partial class MainViewModel : ObservableObject
         return result;
     }
 
+}
+
+/// <summary>An attachment in the reader: name, kind, size, and the stored description it came from.</summary>
+public sealed class AttachmentRow(StoredAttachment source)
+{
+    public StoredAttachment Source { get; } = source;
+    public string FileName => Source.FileName;
+    public string SizeText => Source.Size switch
+    {
+        <= 0 => "",
+        < 1024 => $"{Source.Size} B",
+        < 1024 * 1024 => $"{Source.Size / 1024.0:0} KB",
+        _ => $"{Source.Size / (1024.0 * 1024):0.0} MB",
+    };
+    public string Kind => Source.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ? "Image" : "Attachment";
+    public string AccessName => string.IsNullOrEmpty(SizeText) ? FileName : $"{FileName}, {SizeText}";
 }
 
 public sealed class WorkspaceChoice : ObservableObject

@@ -363,6 +363,8 @@ public sealed class SyncCoordinator
             var batch = new PersonalBatch();
             batch.Upserts.Add(message);
             batch.Bodies.Add((new MessageKey(account.Id, folder.Id, message.Uid), body.Text, body.Html));
+            // The attachment list (names, types, sizes) is kept with the saved message so it shows offline.
+            batch.Attachments.AddRange(body.Attachments);
             await _store.CommitAsync(batch, cancellationToken).ConfigureAwait(false);
         }
     }

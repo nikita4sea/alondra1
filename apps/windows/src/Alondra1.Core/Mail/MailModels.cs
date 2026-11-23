@@ -66,7 +66,12 @@ public sealed class StoredMessage
 public sealed class StoredBody
 {
     public string Text { get; set; } = "";
+
+    /// <summary>The HTML version, with inline (cid:) images already embedded as data: URIs so it shows offline.</summary>
     public string? Html { get; set; }
+
+    /// <summary>Downloadable parts (not the inline images used by <see cref="Html"/>).</summary>
+    public List<StoredAttachment> Attachments { get; set; } = [];
 }
 
 public sealed class StoredAttachment

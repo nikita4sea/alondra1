@@ -1,0 +1,36 @@
+From: "Example Sender" <sender@example.com>
+To: reader@example.org
+Date: Mon, 23 Nov 2026 09:00:00 +0000
+MIME-Version: 1.0
+Subject: M06 attachments
+Content-Type: multipart/mixed; boundary="m1"
+
+--m1
+Content-Type: multipart/related; boundary="r2"
+
+--r2
+Content-Type: text/html; charset=utf-8
+
+<p>See the chart <img src="cid:chart@example" alt="chart"></p>
+--r2
+Content-Type: image/png
+Content-ID: <chart@example>
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGM4oaGBFTEMLQkAgl1G
+AWqNFmsAAAAASUVORK5CYII=
+--r2--
+--m1
+Content-Type: image/png; name="photo.png"
+Content-Disposition: attachment; filename="photo.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGPQ0DiBFTEMLQkAMl1G
+Ad0cO4AAAAAASUVORK5CYII=
+--m1
+Content-Type: application/pdf; name="report.pdf"
+Content-Disposition: attachment; filename="report.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJWZpeHR1cmUKMSAwIG9iajw8Pj5lbmRvYmoKdHJhaWxlcjw8Pj4KJSVFT0YK
+--m1--

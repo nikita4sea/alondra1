@@ -302,7 +302,7 @@
       </Border>
 
       <!-- ===== Content ===== -->
-      <Grid Grid.Row="4" Margin="{StaticResource ShellContentMargin}">
+      <Grid x:Name="ContentArea" Grid.Row="4" Margin="{StaticResource ShellContentMargin}">
         <!-- Panes are separated by exactly one 8 px gutter (LayoutArranger.Gutter); the splitter hit target fills that gutter. -->
         <shell:MailDockPanel x:Name="Dock"
                              FoldersDock="{Binding PaneFoldersDock}"
@@ -310,7 +310,8 @@
                              FolderBreadth="{Binding FolderBreadth, Mode=OneWay}"
                              ReadingBreadth="{Binding ReadingBreadth, Mode=OneWay}"
                              Visibility="{Binding IsMail, Converter={StaticResource BoolVis}}"
-                             BreadthCommitted="Dock_BreadthCommitted">
+                             BreadthCommitted="Dock_BreadthCommitted"
+                             SizeChanged="Dock_SizeChanged">
           <Border Style="{StaticResource Pane}">
             <ListBox x:Name="FolderList" ItemsSource="{Binding Folders}" BorderThickness="0" Background="Transparent" Margin="8"
                      AutomationProperties.Name="Folders" ItemContainerStyle="{StaticResource TabItem}"
@@ -331,7 +332,7 @@
           </Border>
           <!-- Message list: 16 px pane padding; header row 48 (title left, view + count right); 12 px gap; 32 px column row;
                the column row and every message row share MailColumns, so From / Subject / Received stay aligned. -->
-          <Border Style="{StaticResource ContentPane}" ClipToBounds="True">
+          <Border x:Name="ListPane" Style="{StaticResource ContentPane}" ClipToBounds="True">
             <DockPanel>
               <Grid x:Name="ListHeader" DockPanel.Dock="Top" Style="{StaticResource PaneHeaderRow}">
                 <Grid.ColumnDefinitions>
@@ -368,14 +369,43 @@
                          VirtualizingPanel.ScrollUnit="Pixel"
                          ScrollViewer.CanContentScroll="True"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         SelectionMode="Extended"
                          SelectionChanged="MessageList_SelectionChanged"
+                         PreviewMouseLeftButtonUp="MessageList_PreviewMouseLeftButtonUp"
+                         KeyDown="MessageList_KeyDown"
                          SizeChanged="MessageList_SizeChanged"
                          ScrollViewer.ScrollChanged="MessageList_ScrollChanged">
+                  <!-- No built-in 1 px padding: rows start exactly where the column header starts, at every display scale. -->
+                  <ListBox.Template>
+                    <ControlTemplate TargetType="ListBox">
+                      <ScrollViewer Focusable="False" Padding="{TemplateBinding Padding}"
+                                    CanContentScroll="{TemplateBinding ScrollViewer.CanContentScroll}"
+                                    HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                    VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
+                        <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                      </ScrollViewer>
+                    </ControlTemplate>
+                  </ListBox.Template>
                   <ListBox.GroupStyle>
                     <GroupStyle>
                       <GroupStyle.HeaderTemplate>
                         <DataTemplate><TextBlock Text="{Binding Items[0].AccountName}" Padding="8,8,8,4" FontWeight="SemiBold" Foreground="{DynamicResource MutedBrush}"/></DataTemplate>
                       </GroupStyle.HeaderTemplate>
+                      <!-- No indent for grouped rows, so they keep the same columns as the From / Subject / Received header. -->
+                      <GroupStyle.ContainerStyle>
+                        <Style TargetType="GroupItem">
+                          <Setter Property="Template">
+                            <Setter.Value>
+                              <ControlTemplate TargetType="GroupItem">
+                                <StackPanel>
+                                  <ContentPresenter/>
+                                  <ItemsPresenter/>
+                                </StackPanel>
+                              </ControlTemplate>
+                            </Setter.Value>
+                          </Setter>
+                        </Style>
+                      </GroupStyle.ContainerStyle>
                     </GroupStyle>
                   </ListBox.GroupStyle>
                   <ListBox.ItemContainerStyle>
@@ -441,25 +471,102 @@
               </Grid>
             </DockPanel>
           </Border>
-          <!-- Reading pane: same 16 px padding and 48 px header row as the list; the subject (or "No message selected")
-               starts the content region 12 px below it. The header row keeps its size whether or not a message is open. -->
-          <Border Style="{StaticResource ContentPane}">
+          <!-- Reading pane: same 16 px padding and 48 px header row as the list. The row holds the storage state (small,
+               secondary) and the HTML | Plain text switch; subject, sender, recipients, date, image bar, and attachments
+               follow 12 px below; the body (MailBodyView, isolated WebView2) fills the rest with the only scroll bar. -->
+          <Border x:Name="ReaderPane" Style="{StaticResource ContentPane}">
             <DockPanel>
               <Grid x:Name="ReaderHeader" DockPanel.Dock="Top" Style="{StaticResource PaneHeaderRow}">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                  <ui:Alondra1Icon Kind="MarkRead" IconSize="16" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center"/>
+                  <!-- One pane at a time (narrow windows): back to the list, keeping its selection and scroll position. -->
+                  <Button x:Name="ReaderBackButton" Style="{StaticResource IconButton}" Click="ReaderBack_Click" Margin="0,0,8,0"
+                          AutomationProperties.Name="Back to the list" ToolTip="Back to the list (Esc)"
+                          Visibility="{Binding ShowBackButton, Converter={StaticResource BoolVis}}">
+                    <ui:Alondra1Icon Kind="Back" IconSize="18"/>
+                  </Button>
+                  <ui:Alondra1Icon Kind="MarkRead" IconSize="14" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center"/>
                   <TextBlock x:Name="ReaderStatus" Text="{Binding ReaderStatus}" FontSize="11" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center"
                              Margin="{StaticResource PaneControlGapLeft}" TextTrimming="CharacterEllipsis"/>
-                  <Button Content="Plain text" Style="{StaticResource CompactButton}" Margin="{StaticResource PaneControlGapLeft}" VerticalAlignment="Center"
-                          Click="PlainText_Click" AutomationProperties.Name="Plain text view"/>
                 </StackPanel>
+                <!-- HTML | Plain text: HTML is selected when the message has it; without HTML the switch is hidden. -->
+                <Border x:Name="FormatSwitch" Grid.Column="1" Background="{DynamicResource SubtleBrush}" CornerRadius="{StaticResource RadiusMd}" Padding="2" VerticalAlignment="Center"
+                        Visibility="{Binding HasHtml, Converter={StaticResource BoolVis}}" AutomationProperties.Name="Message format">
+                  <StackPanel Orientation="Horizontal">
+                    <Button x:Name="HtmlFormatButton" Content="HTML" Style="{StaticResource ModeButton}" MinHeight="28" Padding="12,0" Tag="{Binding ShowingHtml}"
+                            Command="{Binding ShowHtmlCommand}" AutomationProperties.Name="Show HTML" ToolTip="Show the formatted message"/>
+                    <Button x:Name="PlainFormatButton" Content="Plain text" Style="{StaticResource ModeButton}" MinHeight="28" Padding="12,0" Tag="{Binding ShowingPlain}"
+                            Command="{Binding ShowPlainCommand}" AutomationProperties.Name="Show plain text" ToolTip="Show the message as plain text"/>
+                  </StackPanel>
+                </Border>
               </Grid>
-              <TextBlock DockPanel.Dock="Top" Text="{Binding ReaderSubject}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" Margin="{StaticResource PaneSectionGapTop}"/>
-              <TextBlock DockPanel.Dock="Top" Text="{Binding ReaderSender}" Foreground="{DynamicResource MutedBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
-              <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource LineBrush}" Margin="{StaticResource PaneSectionGapTop}"/>
-              <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <TextBlock x:Name="PlainBody" Text="{Binding ReaderBody}" TextWrapping="Wrap" Margin="{StaticResource PaneSectionGapTop}" LineHeight="20"/>
-              </ScrollViewer>
+              <TextBlock x:Name="ReaderSubjectText" DockPanel.Dock="Top" Text="{Binding ReaderSubject}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" Margin="{StaticResource PaneSectionGapTop}"/>
+              <TextBlock DockPanel.Dock="Top" Text="{Binding ReaderSender}" TextWrapping="Wrap" Margin="0,6,0,0" TextTrimming="CharacterEllipsis"/>
+              <TextBlock DockPanel.Dock="Top" Text="{Binding ReaderTo}" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,2,0,0"
+                         TextTrimming="CharacterEllipsis" ToolTip="{Binding ReaderTo}" Visibility="{Binding HasReaderTo, Converter={StaticResource BoolVis}}"/>
+              <TextBlock DockPanel.Dock="Top" Text="{Binding ReaderMeta}" Foreground="{DynamicResource MutedBrush}" FontSize="12" Margin="0,2,0,0"/>
+              <!-- Remote images: blocked by default (no proxy, so loading reveals this PC's address to the image host). -->
+              <Border x:Name="ImageBar" DockPanel.Dock="Top" Margin="0,12,0,0" Padding="12,8" CornerRadius="{StaticResource RadiusMd}" Background="{DynamicResource SubtleBrush}"
+                      Visibility="{Binding ShowImageBar, Converter={StaticResource BoolVis}}" AutomationProperties.Name="Remote images">
+                <StackPanel>
+                  <DockPanel>
+                    <ui:Alondra1Icon Kind="Image" IconSize="16" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding ImageBarText}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                  </DockPanel>
+                  <WrapPanel Margin="24,6,0,0">
+                    <Button Content="Load images" Style="{StaticResource CompactButton}" Command="{Binding LoadImagesCommand}" Margin="0,0,8,0"
+                            ToolTip="Load the images of this message. The image hosts can see that the message was opened and this PC's internet address."/>
+                    <Button Style="{StaticResource QuietButton}" Command="{Binding TrustSenderCommand}" MaxWidth="320"
+                            ToolTip="Always load images from this sender. Change the list in Settings → Mail.">
+                      <TextBlock Text="{Binding TrustSenderLabel}" TextTrimming="CharacterEllipsis"/>
+                    </Button>
+                  </WrapPanel>
+                </StackPanel>
+              </Border>
+              <Border x:Name="HtmlFailureBar" DockPanel.Dock="Top" Margin="0,12,0,0" Padding="12,8" CornerRadius="{StaticResource RadiusMd}" Background="{DynamicResource SubtleBrush}"
+                      Visibility="{Binding ShowHtmlFailure, Converter={StaticResource BoolVis}}">
+                <StackPanel Orientation="Horizontal">
+                  <ui:Alondra1Icon Kind="Alert" IconSize="16" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center"/>
+                  <TextBlock Text="Unable to display HTML — showing the plain text." VerticalAlignment="Center" Margin="8,0,0,0" TextWrapping="Wrap"/>
+                </StackPanel>
+              </Border>
+              <!-- Attachments: files only; inline pictures stay in the body. -->
+              <ItemsControl x:Name="AttachmentList" DockPanel.Dock="Top" ItemsSource="{Binding Attachments}" Margin="0,12,0,0" AutomationProperties.Name="Attachments"
+                            Visibility="{Binding HasAttachments, Converter={StaticResource BoolVis}}" Focusable="False">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Background="{DynamicResource SubtleBrush}" CornerRadius="{StaticResource RadiusMd}" Padding="10,4,4,4" Margin="0,0,8,8" MaxWidth="320"
+                            AutomationProperties.Name="{Binding AccessName}">
+                      <DockPanel>
+                        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                          <Button Style="{StaticResource IconButton}" Width="30" Height="30" Click="OpenAttachment_Click" Tag="{Binding}"
+                                  AutomationProperties.Name="{Binding FileName, StringFormat='Open {0}'}" ToolTip="Open">
+                            <ui:Alondra1Icon Kind="Next" IconSize="14"/>
+                          </Button>
+                          <Button Style="{StaticResource IconButton}" Width="30" Height="30" Click="SaveAttachment_Click" Tag="{Binding}"
+                                  AutomationProperties.Name="{Binding FileName, StringFormat='Save {0}'}" ToolTip="Save as…">
+                            <ui:Alondra1Icon Kind="Download" IconSize="14"/>
+                          </Button>
+                        </StackPanel>
+                        <ui:Alondra1Icon Kind="{Binding Kind}" IconSize="16" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center"/>
+                        <StackPanel VerticalAlignment="Center" Margin="8,0,8,0">
+                          <TextBlock Text="{Binding FileName}" TextTrimming="CharacterEllipsis" ToolTip="{Binding FileName}"/>
+                          <TextBlock Text="{Binding SizeText}" FontSize="11" Foreground="{DynamicResource MutedBrush}"/>
+                        </StackPanel>
+                      </DockPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <Border DockPanel.Dock="Top" Height="1" Background="{DynamicResource LineBrush}" Margin="0,4,0,0"/>
+              <ui:MailBodyView x:Name="ReaderBody" Margin="0,8,0,0" Document="{Binding ReaderDocument}" AllowRemote="{Binding ReaderAllowRemote}"
+                               FallbackText="{Binding ReaderBody}"/>
             </DockPanel>
           </Border>
         </shell:MailDockPanel>

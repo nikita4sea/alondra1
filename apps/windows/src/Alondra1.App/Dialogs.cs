@@ -76,6 +76,53 @@ public static class Dialogs
         var backgroundPage = Page();
         backgroundPage.Children.Add(background.Build());
 
+        // Mail: reading format, remote images, trusted senders, and the reading layout (the same values as View settings).
+        var reading = model.Config.Reading;
+        var mail = Page();
+        mail.Children.Add(Title("Mail"));
+        mail.Children.Add(Subtitle("Reading", first: true));
+        var format = new ComboBox { ItemsSource = new[] { "HTML when available", "Plain text" }, SelectedIndex = reading.PreferHtml ? 0 : 1, Width = 240, HorizontalAlignment = HorizontalAlignment.Left };
+        System.Windows.Automation.AutomationProperties.SetName(format, "Open messages as");
+        mail.Children.Add(Labeled("Open messages as", format));
+        mail.Children.Add(Note("Every message can still be switched with HTML | Plain text above the message. Scripts, forms, and other active content never run."));
+        mail.Children.Add(Subtitle("Images"));
+        var images = new ComboBox { ItemsSource = new[] { "Ask before loading", "Always load" }, SelectedIndex = reading.RemoteImages == RemoteImagePolicy.Ask ? 0 : 1, Width = 240, HorizontalAlignment = HorizontalAlignment.Left };
+        System.Windows.Automation.AutomationProperties.SetName(images, "Remote images");
+        mail.Children.Add(Labeled("Remote images", images));
+        mail.Children.Add(Note("Pictures inside a message always show, also offline. Remote images are downloaded from the sender's servers: "
+            + "loading them tells those servers that the message was opened and reveals this PC's internet address. Alondra1 has no image proxy, "
+            + "so this is never anonymous. Obvious tracking pixels stay blocked either way."));
+        mail.Children.Add(Subtitle("Trusted senders"));
+        var senders = new System.Collections.ObjectModel.ObservableCollection<string>(reading.TrustedSenders);
+        var trusted = new ListBox { MinHeight = 60, MaxHeight = 160, Width = 360, HorizontalAlignment = HorizontalAlignment.Left, ItemsSource = senders };
+        System.Windows.Automation.AutomationProperties.SetName(trusted, "Trusted senders");
+        var noSenders = Note("No trusted senders yet.");
+        var remove = Button("Remove", () =>
+        {
+            if (trusted.SelectedItem is string sender)
+                senders.Remove(sender);
+        });
+        void ShowSenders()
+        {
+            trusted.Visibility = senders.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+            noSenders.Visibility = senders.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            remove.IsEnabled = senders.Count > 0;
+        }
+
+        senders.CollectionChanged += (_, _) => ShowSenders();
+        ShowSenders();
+        mail.Children.Add(noSenders);
+        mail.Children.Add(trusted);
+        mail.Children.Add(ButtonRow(remove));
+        mail.Children.Add(Note("Remote images from these senders always load. Add a sender with “Always load from …” above a message."));
+        mail.Children.Add(Subtitle("Layout"));
+        var density = new ComboBox { ItemsSource = Enum.GetNames<Density>(), SelectedItem = model.Config.Appearance.Density.ToString(), Width = 240, HorizontalAlignment = HorizontalAlignment.Left };
+        var readingDock = new ComboBox { ItemsSource = Enum.GetNames<Alondra1.Core.Layout.DockEdge>(), SelectedItem = model.Config.Layout.ReadingDock.ToString(), Width = 240, HorizontalAlignment = HorizontalAlignment.Left };
+        var foldersDock = new ComboBox { ItemsSource = Enum.GetNames<Alondra1.Core.Layout.DockEdge>(), SelectedItem = model.Config.Layout.FoldersDock.ToString(), Width = 240, HorizontalAlignment = HorizontalAlignment.Left };
+        mail.Children.Add(Labeled("Message rows", density));
+        mail.Children.Add(Labeled("Reading pane", readingDock));
+        mail.Children.Add(Labeled("Folders", foldersDock));
+
         // Accounts
         var accounts = Page();
         accounts.Children.Add(Title("Accounts"));
@@ -192,7 +239,7 @@ public static class Dialogs
         // Layout: section list on the left, the chosen section on the right; only the section scrolls.
         var pages = new (string Name, string Icon, UIElement Page)[]
         {
-            ("Appearance", "Settings", appearance), ("Background", "Image", backgroundPage), ("Accounts", "Contacts", accounts),
+            ("Appearance", "Settings", appearance), ("Background", "Image", backgroundPage), ("Mail", "Mail", mail), ("Accounts", "Contacts", accounts),
             ("Connections", "Refresh", connections), ("Data", "Archive", data),
         };
         var grid = new Grid();
@@ -241,6 +288,9 @@ public static class Dialogs
             model.Config.OAuth.Tasks = tasks.IsChecked == true;
             model.Config.OAuth.Contacts = contacts.IsChecked == true;
             model.Config.OAuth.Notes = notes.IsChecked == true;
+            reading.PreferHtml = format.SelectedIndex != 1;
+            reading.RemoteImages = images.SelectedIndex == 1 ? RemoteImagePolicy.Always : RemoteImagePolicy.Ask;
+            reading.TrustedSenders = senders.ToList();
             var validation = ConfigWorkflow.Validate(model.Config);
             if (!validation.Ok)
             {
@@ -249,7 +299,15 @@ public static class Dialogs
             }
 
             background.Commit();
+            if (Enum.TryParse<Density>(density.SelectedItem as string, out var rows) && rows != model.Config.Appearance.Density)
+                model.SetDensity(rows);
+            if (Enum.TryParse<Alondra1.Core.Layout.DockEdge>(readingDock.SelectedItem as string, out var readerEdge) && readerEdge != model.Config.Layout.ReadingDock)
+                model.SetDock(folders: false, readerEdge);
+            if (Enum.TryParse<Alondra1.Core.Layout.DockEdge>(foldersDock.SelectedItem as string, out var folderEdge) && folderEdge != model.Config.Layout.FoldersDock)
+                model.SetDock(folders: true, folderEdge);
             model.ConfigStoreSave();
+            model.RenderReader();
+            (owner as MainWindow)?.RefreshLayoutSelectors();
             ThemeService.Apply(model.Config.Appearance);
             (owner as MainWindow)?.ApplyBackground();
             model.ServicesRefresh();

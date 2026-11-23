@@ -64,6 +64,8 @@ public partial class App : Application
             && Enum.TryParse<ThemePreference>(theme["--theme=".Length..], ignoreCase: true, out var forced))
             Services.Config.Appearance.Theme = forced;
         ThemeService.Apply(Services.Config.Appearance);
+        // The message reader's browser profile lives with the app's data (a temporary folder in demo mode).
+        Alondra1.App.Controls.MailBodyView.UserDataFolder = Path.Combine(Services.Home, "webview");
         var window = new MainWindow(new MainViewModel(Services));
         MainWindow = window;
         window.Show();

@@ -7,7 +7,7 @@ These are the rules for changing Alondra1. They protect the users' data and priv
 ## Product principles
 
 1. **Local-first.** The app must open, show local mail and tasks, and accept edits with no network connection. Online features fail gracefully: they show a status such as "Offline" and never block the window.
-2. **No Alondra1 service unless the user opts in.** Do not add telemetry, analytics, crash upload, update checks, ads, or remote configuration. Network calls go only to the accounts the user added, using the endpoints shown in their settings. The one exception is the optional Alondra1 cloud ([ADR 0001](decisions/0001-opt-in-cloud.md)): it is contacted only after the user explicitly connects it, never in demo mode, and the app must stay fully usable without it. The Windows app does not contact it yet.
+2. **No Alondra1 service unless the user opts in.** Do not add telemetry, analytics, crash upload, update checks, ads, or remote configuration. Network calls go only to the accounts the user added, using the endpoints shown in their settings. The one exception is the optional Alondra1 cloud ([ADR 0001](decisions/0001-opt-in-cloud.md)): it is contacted only after the user explicitly connects it, never in demo mode, and the app must stay fully usable without it. The Windows app does not contact it yet. Remote images in a message are fetched from the sender's servers only after the user chooses to load them (per message, per trusted sender, or Settings → Mail → Always load); the default is to block them.
 3. **The user's data stays theirs.** Everything Alondra1 writes is in `%LOCALAPPDATA%\alondra1`, in documented formats (SQLite, JSON, CSV, iCalendar). Exports never contain secrets.
 4. **Never lose data silently.** Before replacing data, validate the input, make a safety copy where it matters, and ask for confirmation. Prefer undo over a confirmation dialog for everyday actions.
 5. **Be honest in the UI.** Say what happened in plain words, such as "Nothing was changed" or "Sent, but the server did not confirm". Sample data is always labeled.
@@ -55,7 +55,7 @@ These are the rules for changing Alondra1. They protect the users' data and priv
 - Secrets go only through `ISecretStore` (DPAPI). Never log them, put them in `config.json`, or show them in an error.
 - **OAuth:** public clients only. Never add a client secret to the code or to an export.
 - **Connections:** TLS by default. Plaintext only after explicit confirmation, and never together with OAuth tokens.
-- Treat everything from a mail server or an imported file as untrusted. HTML is converted to text, file names are sanitized, and sizes are limited.
+- Treat everything from a mail server or an imported file as untrusted. Message HTML is cleaned with an allow-list and shown only in the isolated reader (`MailBodyView`: scripts off, strict Content Security Policy, no navigation); file names are sanitized, and sizes are limited.
 - The app markup must not load anything from the network (checked by `App_markup_loads_nothing_from_the_network`).
 
 ## UI and design

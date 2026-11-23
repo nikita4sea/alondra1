@@ -49,11 +49,11 @@ flowchart TD
 
 | Project | Target | Depends on | Responsibility |
 | --- | --- | --- | --- |
-| `Alondra1.Core` | `net10.0` | nothing | Domain models, configuration schema, sync and security policies, the local task engine, and the **ports** (interfaces) that the other projects implement. No UI, file, database, or network code. |
+| `Alondra1.Core` | `net10.0` | HtmlSanitizer (AngleSharp), for cleaning message HTML | Domain models, configuration schema, sync and security policies, the local task engine, and the **ports** (interfaces) that the other projects implement. No UI, file, database, or network code. |
 | `Alondra1.Mail` | `net10.0` | Core, MailKit | `MailKitGateway` implements `IMailGateway`: probing, folder listing, incremental fetch, bodies, attachments, flags and moves, IDLE, POP deletion, SMTP send. |
 | `Alondra1.Persistence` | `net10.0-windows` | Core, Microsoft.Data.Sqlite, ProtectedData | `SqlitePersonalStore` (local mail copy with FTS5 search, outbox, organizer cache), `SqliteTaskStore` (local tasks), `DpapiSecretStore`, `ConfigFileStore`, `AttachmentFiles`, `TaskFileStore`. |
 | `Alondra1.Providers` | `net10.0` | Core, MSAL, Google.Apis.Auth | `OAuthService` (sign-in and token refresh for Microsoft 365 and Google) and `OrganizerGateway` (calendar, tasks, contacts, notes over Microsoft Graph and Google APIs). |
-| `Alondra1.App` | `net10.0-windows` (WPF) | all of the above, CommunityToolkit.Mvvm | Window shell, workspaces, view models, dialogs, themes, icons, backgrounds, reminders, and the composition root. Builds `Alondra1.exe`. |
+| `Alondra1.App` | `net10.0-windows10.0.19041.0` (WPF) | all of the above, CommunityToolkit.Mvvm, Microsoft.Web.WebView2 | Window shell, workspaces, view models, dialogs, themes, icons, backgrounds, reminders, and the composition root. Builds `Alondra1.exe`. |
 | `Alondra1.Tests` | `net10.0-windows` | Core, Mail, Persistence, Providers | Acceptance, To-do, scale, and UI design tests. The UI tests read the XAML from the repository instead of referencing the App project. |
 
 **The dependency rule:** only `Alondra1.App` knows every project. Adapters depend on `Alondra1.Core`, never on each other, and `Alondra1.Core` depends on nothing. Mail, storage, and providers can each be replaced or faked in tests without touching the rest.
@@ -184,7 +184,7 @@ The installer puts the program in `%LOCALAPPDATA%\Programs\Alondra1`. It never t
 - **Secrets:** stored only in `secrets\`, encrypted with DPAPI (`CurrentUser` scope plus an app-specific entropy). They are never written to `config.json` or included in an export.
 - **OAuth:** public clients only. Alondra1 never stores a client secret. The user enters their own client ids ([OAUTH-SETUP.md](OAUTH-SETUP.md)).
 - **Transport:** implicit TLS or required STARTTLS by default, verified with the operating system's certificate check. Unencrypted connections need explicit, repeated confirmation (`ConnectionPolicy`).
-- **Mail content:** HTML bodies are converted to plain text (`HtmlMailSanitizer.ToPlainText`). No scripts run and no remote content loads.
+- **Mail content:** `Alondra1.Mail.MimeBody` picks the HTML and text bodies from the MIME tree, embeds `cid:` pictures as `data:` URIs (so they show offline), and lists attachments. `Core/Html/MailHtml` cleans the HTML with an allow-list sanitizer (HtmlSanitizer on AngleSharp) and wraps it in a document with a strict Content Security Policy; `App/Controls/MailBodyView` shows it in an isolated WebView2 with scripts off. Remote images load only by the user's choice (`ReaderPolicy`), never through a proxy. Bodies and attachment bytes are never logged.
 - **Files:** stored attachment paths are relative and checked to stay inside their folder before they are opened. Imported data is validated before anything is written.
 
 ## Threading and errors

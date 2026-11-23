@@ -21,14 +21,16 @@ public static class ThemeService
         foreach (var (key, value) in colors ?? [])
             if (palette[key] is SolidColorBrush && IsHexColor(value))
                 palette[key] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(value));
-        // Over a background picture, main panels are about 69% opaque so the picture shows through, and the header gets
-        // a light scrim of the base color behind its labels. Popups, menus, and inputs keep the opaque SurfaceBrush.
+        // Over a background picture, main panels are 88% opaque: the picture shows in the gaps and faintly behind the
+        // panels, while text (including muted dates and metadata) keeps at least 4.5:1 contrast over any picture, even a
+        // pure white or black area (checked by tests). The header gets a light scrim of the base color behind its labels.
+        // Popups, menus, and inputs keep the opaque SurfaceBrush.
         var active = Shell.BackgroundService.IsActive(appearance.Background);
         if (palette["SurfaceBrush"] is SolidColorBrush surface)
         {
             var color = surface.Color;
             if (active)
-                color.A = 0xB0;
+                color.A = PanelAlphaOverPicture;
             palette["PanelBrush"] = new SolidColorBrush(color);
         }
 
@@ -45,6 +47,9 @@ public static class ThemeService
         // The picture's brightness adapts to the theme, so it is re-processed when the theme changes.
         (Application.Current.MainWindow as MainWindow)?.ApplyBackground();
     }
+
+    /// <summary>Panel opacity over a background picture (0xE0 = 88 %).</summary>
+    public const byte PanelAlphaOverPicture = 0xE0;
 
     public static bool IsDark => Application.Current.Resources.MergedDictionaries[0]["ChromeBrush"] is SolidColorBrush { Color: var c } && c.R + c.G + c.B < 200;
 

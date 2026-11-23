@@ -1,0 +1,27 @@
+From: "Example Sender" <sender@example.com>
+To: reader@example.org
+Date: Mon, 23 Nov 2026 09:00:00 +0000
+MIME-Version: 1.0
+Subject: M04 cid
+Content-Type: multipart/related; boundary="r1"
+
+--r1
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>Two pictures:</p><img src="cid:red@example" alt="red" width="8" height="8"><img src="cid:blue@example" alt="blue" width="8" height="8"></body></html>
+--r1
+Content-Type: image/png
+Content-ID: <red@example>
+Content-Transfer-Encoding: base64
+Content-Disposition: inline
+
+iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGM4oaGBFTEMLQkAgl1G
+AWqNFmsAAAAASUVORK5CYII=
+--r1
+Content-Type: image/png
+Content-ID: <blue@example>
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGPQ0DiBFTEMLQkAMl1G
+Ad0cO4AAAAAASUVORK5CYII=
+--r1--

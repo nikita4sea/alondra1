@@ -1,0 +1,31 @@
+From: "Example Sender" <sender@example.com>
+To: reader@example.org
+Date: Mon, 23 Nov 2026 09:00:00 +0000
+MIME-Version: 1.0
+Subject: M08 nested
+Content-Type: Multipart/Mixed; boundary="x1"
+
+--x1
+Content-Type: MULTIPART/ALTERNATIVE; boundary="x2"
+
+--x2
+Content-Type: Text/Plain; charset=utf-8
+
+Nested plain.
+--x2
+Content-Type: Multipart/Related; boundary="x3"
+
+--x3
+Content-Type: TEXT/HTML; charset=utf-8
+
+<p>Nested HTML <img src="CID:Logo@Example" alt="logo"></p>
+--x3
+Content-Type: Image/PNG
+Content-ID: <logo@example>
+Content-Transfer-Encoding: BASE64
+
+iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEUlEQVR4nGM4oaGBFTEMLQkAgl1G
+AWqNFmsAAAAASUVORK5CYII=
+--x3--
+--x2--
+--x1--

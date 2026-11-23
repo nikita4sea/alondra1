@@ -11,6 +11,36 @@ This is the release history, with what was verified for each release and what wa
 
 **Test machine:** one PC running Windows build 10.0.26300 (DisplayVersion 26H2). That is the only OS any release was launched on.
 
+## Unreleased: client Milestones 2–4, rich reader, responsive layout, polish (2026-11-23)
+
+Client spec (`.import/ALONDRA1_CLIENT_SPEC.md`) §4–§7. All three milestones are in one change and were verified together on one installed build.
+
+**Milestone 2: rich message reader**
+- **HTML by default:** messages open in their HTML version, with an **HTML | Plain text** switch (instant, no re-fetch) and a default in Settings → Mail. `MimeBody` picks the bodies through nested multiparts and embeds `cid:` pictures as `data:` URIs, so they show offline. It also lists the attachments.
+- **Isolation:** `MailHtml` cleans HTML with an allow-list (HtmlSanitizer on AngleSharp). It removes scripts, styles with code, frames, forms, objects, SVG/MathML, meta refresh, `@import`, and `javascript:`/`vbscript:`/`data:text` URLs, and drops the content of code elements entirely. The result is wrapped in a document with a strict Content Security Policy. `MailBodyView` shows it in a WebView2 composition control with scripts, dev tools, host objects, downloads, permissions, new windows, and navigation off. Links open in the default browser or mail app (http, https, mailto only).
+- **Remote images** are blocked by default. A bar offers *Load images* and *Always load from …*; Settings → Mail offers *Always load* and the trusted-sender list. Blocked images keep their size and alt text, and obvious tracking pixels are always removed. In ask mode no request leaves the app (checked in WebView2). There is no proxy, so the settings say plainly that loading reveals the PC's address.
+- **Attachments:** chips with name, size, Open, and Save, for IMAP and POP3, online and offline copies. Opening a file that can run programs asks first.
+- If HTML cannot be shown, the reader switches to plain text and says so. The log gets the reason without message content.
+- The app now targets `net10.0-windows10.0.19041.0`, because the WebView2 composition control needs the Windows SDK projection. That adds about 4 MB to the installer.
+
+**Milestone 3: responsive layout and accessibility**
+- **Pane sizes:** while side by side, the list keeps at least 420 px and the reader 440 px. The default reader width gives about 55/45. Below that, Mail shows **one pane at a time**: the list, then the message after a click or Enter, with a Back button and Esc. The list keeps its selection and scroll position.
+- **Multi-select** (Shift/Ctrl) shows "3 selected · …" in the count, and Delete, Archive, and Mark read/unread apply to all selected messages. Mail shortcuts do nothing while you type in a text box.
+- **Settings → Mail:** reading format, remote images, trusted senders, row density, and pane positions.
+- **Display scaling:** `--scale` renders at 125, 150, and 200 %. This found the rows 2 px right of the column header at 150 %, caused by the ListBox template's built-in 1 px padding. A padding-free template fixed it, and the columns now match exactly at every scale. Grouped rows were also indented by WPF's default group container (6 px at 100 %); that is fixed too.
+
+**Milestone 4: polish**
+- **Rows** are 32 px (compact, default) and 40 px (comfortable).
+- **Panels over a background picture** are now 88 % opaque instead of 69 %. At 69 %, muted text over a bright part of the picture fell to 2.4:1; at 88 % every text color keeps at least 4.5:1 over any picture (`LegibilityTests`).
+- The reader's scroll bars match the app's slim ones. No hover animations were added, because no controls animated before (spec: "only where controls already animate").
+
+**Checks** (the snapshot and reader checks live in `scripts/`; see the [runbook](runbooks/windows-reinstall-check.md)):
+- `dotnet test`: 198 passed, 1 skipped (the opt-in 10 GB test), including the 5 live mail tests. New tests cover fixtures M01–M12, image policy, attachments, layout minimums, one-pane frames, the default split, and legibility.
+- `check-reader.ps1`: all 13 fixture runs pass in the real WebView2. No script ran in M10, no remote request was made while images were blocked, and the expected attachments, formats, and image counts appeared.
+- `snapshot-matrix.ps1`: 60 snapshots. It covers 4 window sizes, light and dark, 100/125/150/200 %, and the inbox, plain, rich, blocked, no-results, one-pane, and Settings states. All pass the geometry checks (heights, insets, toolbar center line, control heights, overflow, overlaps, gutter, From column).
+- Reinstall check on the final build: uninstall, clean install (56 MB installer), import, sync of both test accounts (110 messages), a send from Dev (IMAP) received by User (POP3), the account kept across a restart, snapshots of every module, and the reader check on the installed copy all passed.
+- Not done: real Windows display-scaling changes (only simulated with `--scale`), hover-state snapshots, and a screen-reader pass.
+
 ## Unreleased: client Milestone 1, correctness and chrome (2026-11-23)
 
 Client spec (`.import/ALONDRA1_CLIENT_SPEC.md`) §3 and §8.1.
