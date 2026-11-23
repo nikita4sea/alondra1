@@ -11,6 +11,20 @@ This is the release history, with what was verified for each release and what wa
 
 **Test machine:** one PC running Windows build 10.0.26300 (DisplayVersion 26H2). That is the only OS any release was launched on.
 
+## Unreleased: client Milestone 1, correctness and chrome (2026-11-23)
+
+Client spec (`.import/ALONDRA1_CLIENT_SPEC.md`) §3 and §8.1.
+
+- **Message count:** the list header counts the folder, account scope, and search filter ("24 messages", "5 of 24 messages", "No matches", "Loading…", "3 selected · …"). It no longer counts the rows that fit on screen, so "0 of 0 visible" and "19 of 60 visible" are gone. An empty list says why: no search results, offline, sync failed, or an empty folder.
+- **Settings icon:** a standard 8-tooth gear replaces the circle with spokes, which looked like a ship's wheel.
+- **Toolbar:** icon buttons are 36 × 36, like every other toolbar surface. Delete shows the danger color only on hover and focus. Disabled message actions say "Select a message first" in their tooltip and help text. The overlap at about 470 px (folder selector under New) is gone.
+- **Rows:** a selected row has an accent edge as well as the selected surface. Unread rows have a dot and a semibold sender and subject. Dates use tabular numerals. The scroll bar is slimmer (8 px), easier to see, and keeps 6 px from the dates.
+- **Subjects in legacy charsets:** Cyrillic and Central European subjects (windows-1251, koi8-r, iso-8859-2 encoded words, and raw 8-bit POP3 headers) showed as "áëàãîïàâ…". The cause: .NET loads those code pages only when a provider is registered, and MimeKit caches the failed lookup. The app now registers them at startup, and raw POP3 headers use the message's charset.
+- **Reinstall tooling:** `--import-config`, `--import-passwords`, `--sync`/`--send-check` results in `logs\check.log`, `--account=`, exit codes, and `apps/windows/scripts/reinstall-local.ps1` ([runbook](runbooks/windows-reinstall-check.md)). The Mail account choice is now kept across restarts.
+- **Verified:**
+  - `dotnet test`: 170 passed, 1 skipped (the opt-in 10 GB test), including the 5 live mail tests.
+  - The reinstall check passed on the installed build. It uninstalled an older copy left in `Programs\Alondra` from before the rename, then did a clean install to `Programs\Alondra1`, the import, a sync of both accounts (104 messages), and a send from Dev (IMAP) received by User (POP3) after one sync. It also checked that the account choice is kept across a restart and took snapshots of every module.
+
 ## Unreleased: IMAP messages, sync button, mail view settings (2026-11-22)
 
 - **IMAP accounts showed no messages.** Sync stored messages under the server's folder ids (`INBOX`, `INBOX.INBOX.Sent`), but the list asked for the displayed names (`Inbox`, `Sent`), and the mapping between them was never filled. The new `SpecialFolders` class maps displayed folders to real ids, learned from the folder list of each sync (the special-use flag first, then the name) and saved to the account's folder map. Copies of sent mail go to the same learned folder.

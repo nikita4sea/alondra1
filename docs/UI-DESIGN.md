@@ -48,7 +48,7 @@ The shell grid is header 56 · 8 · toolbar 48 · 8 · content. In Mail, `Layout
 
 Alignment in the Mail panes:
 
-- **List pane:** the folder title starts at the 16 px inset; the view selector and the count form a right-anchored group ending at the 16 px inset. From / Subject / Received and every message row use one column definition (`Controls/MailColumns.cs`), so the labels stay over their columns at any width. Each row reserves a 16 px unread-dot gutter, so “From” lines up with the sender names, not with the title. When the list shows its scroll bar, the column header takes the same right inset.
+- **List pane:** the folder title starts at the 16 px inset; the count is right-anchored at the 16 px inset. From / Subject / Received and every message row use one column definition (`Controls/MailColumns.cs`), so the labels stay over their columns at any width. Each row reserves a 16 px unread-dot gutter, so “From” lines up with the sender names, not with the title. When the list shows its scroll bar, the column header takes the same right inset.
 - **Reading pane:** the status icon, label, and **Plain text** sit in the same 48 px header row as the list's title row; the subject (or “No message selected”) starts 12 px below it. The header row keeps its size with or without a message.
 - **Selection** changes only colors (fill and foreground), never font weight, padding, or borders, so tabs and workspace tabs keep their bounds.
 
@@ -110,6 +110,15 @@ Spacing follows 4 / 8 / 12 / 16 / 20 / 24 (panel padding 16, field gap 8, sectio
 | Danger / Success / Star | | | errors and overdue / completion / importance (unchanged; they carry meaning, not branding) |
 
 The palette comes from the Alondra1 bird logo: wings #9397C4 to #D8D5EB, breast #F9DCCE, ground #FCF6F7. The logo's own lavender is too light for white button text (about 2.5:1), so brand fills use a deeper #6C6DB0 (4.7:1 with white), and accent text uses #55569E in the light theme (5.4:1 on the selected color). `UiDesignTests` checks WCAG contrast for text, muted text, accents, and button text in both themes.
+
+### Message list and toolbar details
+
+- **Count** (list header): describes the folder, account scope, and search, never the rows that fit on screen: `24 messages`, `5 of 24 messages` while searching, `No matches`, `No messages`, `Loading…`, and `3 selected · 24 messages` with several rows selected (`Core/Mail/MessageCount.cs`).
+- **Empty list** says why: loading, empty folder, no search results, offline, or sync failed.
+- **Rows:** unread = dot **and** semibold sender and subject; selected = `SelectedBrush` plus a 3 px accent edge; hover = `HoverBrush`; keyboard focus = focus ring. Dates use tabular numerals.
+- **Scroll bar:** 8 px track, 6 px thumb; with a scroll bar the rows keep 6 px before it and the column header follows.
+- **Icon buttons** are 36 × 36 (`IconButtonSize = ControlMd`). `New` is the only filled accent button in the Mail toolbar; Delete (`DangerIconButton`) turns to the danger color only on hover and keyboard focus. Message actions are disabled without a selection and say so in their tooltip (`Controls/ActionHint.cs`).
+- **Settings** uses a standard 8-tooth gear icon, named and tooltipped `Settings`.
 
 Restyled controls: buttons (quiet, icon, primary, navigation, mode), text boxes, search, selectors (rounded box, chevron, rounded drop-down), context menus and submenus, tooltips, check boxes, list rows, and slim scroll bars. Custom colors from Settings → Edit light/dark colors still override any token.
 
@@ -178,4 +187,3 @@ The built-in pictures are original artwork drawn for Alondra1 by `apps/windows/d
 - **WebP** pictures need the Windows WebP codec (included in Windows 11; on Windows 10 it is the “WebP Image Extensions” Store package). Without it the picker explains this and nothing changes.
 - Screen readers were not used for testing; the accessibility tree was read through UI Automation.
 - **Spacing at display scaling** other than 100% (125%, 150%, 200%) and after maximize/restore was not measured; geometry is in DIPs with layout rounding on.
-- **Very narrow Mail toolbar:** at about 470 px the folder selector is partly covered by the New button (as it was before the spacing change); the header itself fits.

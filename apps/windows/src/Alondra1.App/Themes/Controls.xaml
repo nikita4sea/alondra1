@@ -16,7 +16,7 @@
   <sys:Double x:Key="ControlSm">30</sys:Double>          <!-- compact buttons and chips -->
   <sys:Double x:Key="ControlMd">36</sys:Double>          <!-- standard buttons, inputs, selectors -->
   <sys:Double x:Key="ControlLg">40</sys:Double>          <!-- large buttons, header search, quick add -->
-  <sys:Double x:Key="IconButtonSize">34</sys:Double>     <!-- icon-only buttons -->
+  <sys:Double x:Key="IconButtonSize">36</sys:Double>     <!-- icon-only buttons: same 36 px surface as ControlMd -->
   <sys:Double x:Key="ControlHeight">36</sys:Double>      <!-- kept for older references; same as ControlMd -->
 
   <!-- Spacing scale 4 / 8 / 12 / 16 / 20 / 24 -->
@@ -145,6 +145,14 @@
     <Setter Property="Height" Value="{StaticResource IconButtonSize}"/>
     <Setter Property="MinHeight" Value="0"/>
     <Setter Property="Padding" Value="0"/>
+  </Style>
+
+  <!-- Destructive icon actions (Delete): quiet by default, danger color only on hover and keyboard focus. -->
+  <Style x:Key="DangerIconButton" TargetType="ButtonBase" BasedOn="{StaticResource IconButton}">
+    <Style.Triggers>
+      <Trigger Property="IsMouseOver" Value="True"><Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/></Trigger>
+      <Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="Foreground" Value="{DynamicResource DangerBrush}"/></Trigger>
+    </Style.Triggers>
   </Style>
 
   <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
@@ -819,10 +827,10 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="Thumb">
-          <Border x:Name="Bd" CornerRadius="4" Background="{DynamicResource MutedBrush}" Opacity="0.35"/>
+          <Border x:Name="Bd" CornerRadius="3" Background="{DynamicResource MutedBrush}" Opacity="0.55"/>
           <ControlTemplate.Triggers>
-            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Opacity" Value="0.6"/></Trigger>
-            <Trigger Property="IsDragging" Value="True"><Setter TargetName="Bd" Property="Opacity" Value="0.75"/></Trigger>
+            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Bd" Property="Opacity" Value="0.75"/></Trigger>
+            <Trigger Property="IsDragging" Value="True"><Setter TargetName="Bd" Property="Opacity" Value="0.9"/></Trigger>
           </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
@@ -843,12 +851,13 @@
   <Style TargetType="ScrollBar">
     <Setter Property="OverridesDefaultStyle" Value="True"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
-    <Setter Property="Width" Value="10"/>
-    <Setter Property="MinWidth" Value="10"/>
+    <!-- 8 px track, 6 px thumb (spec: 6-8 px, visible, never over the date column). -->
+    <Setter Property="Width" Value="8"/>
+    <Setter Property="MinWidth" Value="8"/>
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ScrollBar">
-          <Track x:Name="PART_Track" IsDirectionReversed="True" Margin="2,2">
+          <Track x:Name="PART_Track" IsDirectionReversed="True" Margin="1,2">
             <Track.DecreaseRepeatButton><RepeatButton Style="{StaticResource ScrollPage}" Command="ScrollBar.PageUpCommand"/></Track.DecreaseRepeatButton>
             <Track.Thumb><Thumb Style="{StaticResource ScrollThumb}"/></Track.Thumb>
             <Track.IncreaseRepeatButton><RepeatButton Style="{StaticResource ScrollPage}" Command="ScrollBar.PageDownCommand"/></Track.IncreaseRepeatButton>
@@ -860,12 +869,12 @@
       <Trigger Property="Orientation" Value="Horizontal">
         <Setter Property="Width" Value="Auto"/>
         <Setter Property="MinWidth" Value="0"/>
-        <Setter Property="Height" Value="10"/>
-        <Setter Property="MinHeight" Value="10"/>
+        <Setter Property="Height" Value="8"/>
+        <Setter Property="MinHeight" Value="8"/>
         <Setter Property="Template">
           <Setter.Value>
             <ControlTemplate TargetType="ScrollBar">
-              <Track x:Name="PART_Track" IsDirectionReversed="False" Margin="2,2">
+              <Track x:Name="PART_Track" IsDirectionReversed="False" Margin="2,1">
                 <Track.DecreaseRepeatButton><RepeatButton Style="{StaticResource ScrollPage}" Command="ScrollBar.PageLeftCommand"/></Track.DecreaseRepeatButton>
                 <Track.Thumb><Thumb Style="{StaticResource ScrollThumb}"/></Track.Thumb>
                 <Track.IncreaseRepeatButton><RepeatButton Style="{StaticResource ScrollPage}" Command="ScrollBar.PageRightCommand"/></Track.IncreaseRepeatButton>

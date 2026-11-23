@@ -18,6 +18,12 @@ namespace Alondra1.Mail;
 
 public sealed class MailKitGateway : IMailGateway
 {
+    /// <summary>
+    /// Legacy charsets (windows-1251, koi8-r, iso-8859-2, …) must be available before MimeKit first looks one up: it
+    /// caches the answer, and without them Cyrillic and Central European subjects decode as Latin-1.
+    /// </summary>
+    static MailKitGateway() => MimeHeaders.EnsureCharsets();
+
     public Task<ProbeResult> ProbeIncomingAsync(AccountConfig account, SecretBundle secrets, CancellationToken cancellationToken) =>
         account.Incoming.Protocol == MailProtocol.Imap
             ? ProbeImapAsync(account, secrets, cancellationToken)
@@ -378,11 +384,11 @@ public sealed class MailKitGateway : IMailGateway
             var uidl = uidls is not null && index < uidls.Count ? uidls[index] : null;
             var uid = uidl is null ? index + 1 : MessageIdentity.StableUid(account.Id + "|" + uidl);
             // The raw header is "Name <address>"; show the name and keep the address, as for IMAP.
-            var fromHeader = headers[HeaderId.From] ?? "";
+            var fromHeader = MimeHeaders.Text(headers, HeaderId.From);
             var sender = InternetAddressList.TryParse(fromHeader, out var parsedFrom) ? parsedFrom.Mailboxes.FirstOrDefault() : null;
             var fromAddress = sender?.Address ?? fromHeader;
             var fromName = string.IsNullOrWhiteSpace(sender?.Name) ? fromAddress : sender.Name;
-            var subject = headers[HeaderId.Subject] ?? "";
+            var subject = MimeHeaders.Text(headers, HeaderId.Subject);
             var date = headers[HeaderId.Date];
             // RFC 5322 dates ("Sun, 22 Nov 2026 13:20:00 +0000 (UTC)") need MimeKit's parser; DateTimeOffset.TryParse rejects most of them.
             var received = date is not null && MimeKit.Utils.DateUtils.TryParse(date, out var parsed) ? parsed : DateTimeOffset.UtcNow;

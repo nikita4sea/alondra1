@@ -117,7 +117,11 @@ public sealed partial class MainViewModel : ObservableObject
     public string ReaderSubject { get; private set; } = "No message selected";
     public string ReaderSender { get; private set; } = "";
     public string ReaderBody { get; private set; } = "";
-    public string VisibleCountText { get; private set; } = "";
+    /// <summary>List header count: "24 messages", "5 of 24 messages", "Loading…", "No messages" (see <see cref="MessageCount"/>).</summary>
+    public string CountText => MessageCount.Describe(Messages.Count, _unfilteredTotal, _loadingMessages, !string.IsNullOrWhiteSpace(SearchText), _selectionCount);
+    private int? _unfilteredTotal;
+    private bool _loadingMessages;
+    private int _selectionCount;
     public bool ShowTimeColumn { get; private set; } = true;
     public bool ShowAttachmentColumn { get; private set; } = true;
     public string MonthLabel { get; private set; } = "";
@@ -165,7 +169,8 @@ public sealed partial class MainViewModel : ObservableObject
     public bool ShowFolderCombo => FoldersDock == DockEdge.Hidden;
     public DockEdge PaneFoldersDock => FoldersDock == DockEdge.Top ? DockEdge.Hidden : FoldersDock;
 
-    public string ReadToggleLabel => SelectedMessage?.IsUnread == true ? "Mark as read" : "Mark as unread";
+    public string ReadToggleLabel => SelectedMessage is null ? "Mark as read or unread — Select a message first"
+        : SelectedMessage.IsUnread ? "Mark as read" : "Mark as unread";
     public string ReadToggleIcon => SelectedMessage?.IsUnread == true ? "MarkRead" : "Mail";
 
     public ConnectionState Connection { get; private set; } = ConnectionState.Ready;
@@ -276,7 +281,14 @@ public sealed partial class MainViewModel : ObservableObject
 
     public void SetAccount(string? account)
     {
-        SelectedAccount = string.IsNullOrWhiteSpace(account) ? "All accounts" : account;
+        SelectedAccount = string.IsNullOrWhiteSpace(account) || !AccountChoices.Contains(account) ? "All accounts" : account;
+        var remembered = IsAllAccounts ? null : SelectedAccount;
+        if (!IsDemo && _services.Config.Layout.MailAccount != remembered)
+        {
+            _services.Config.Layout.MailAccount = remembered;
+            SaveConfig();
+        }
+
         _ = ReloadMessagesAsync();
         OnPropertyChanged(nameof(SelectedAccount));
         OnPropertyChanged(nameof(IsAllAccounts));
@@ -331,11 +343,8 @@ public sealed partial class MainViewModel : ObservableObject
     {
         ShowTimeColumn = width > 285;
         ShowAttachmentColumn = width > 360;
-        var fit = RowHeight <= 0 ? 0 : (int)Math.Floor(Math.Max(0, height) / RowHeight);
-        VisibleCountText = $"{Math.Min(Messages.Count, Math.Max(0, fit))} of {Messages.Count} visible";
         OnPropertyChanged(nameof(ShowTimeColumn));
         OnPropertyChanged(nameof(ShowAttachmentColumn));
-        OnPropertyChanged(nameof(VisibleCountText));
     }
 
     public void SetDock(bool folders, DockEdge edge)
@@ -474,15 +483,7 @@ public sealed partial class MainViewModel : ObservableObject
         var plan = ConfigWorkflow.Preview(_services.Config, replacement);
         if (!plan.Ok || plan.Merged is null || plan.Replaced is null)
             return;
-        var next = replace ? plan.Replaced : plan.Merged;
-        next.DemoMode = _services.Config.DemoMode && next.Accounts.Count == 0;
-        _services.Config.Appearance = next.Appearance;
-        _services.Config.Layout = next.Layout;
-        _services.Config.OAuth = next.OAuth;
-        _services.Config.Accounts = next.Accounts;
-        _services.Config.SchemaVersion = ConfigSchema.Current;
-        SaveConfig();
-        _services.RefreshOAuth();
+        _services.ApplyImported(replace ? plan.Replaced : plan.Merged);
         _ = InitializeAsync();
     }
 
@@ -572,39 +573,100 @@ public sealed partial class MainViewModel : ObservableObject
 
     private async Task ReloadMessagesAsync()
     {
+        _loadingMessages = true;
+        RaiseListState();
+        var searching = !string.IsNullOrWhiteSpace(SearchText);
         IReadOnlyList<StoredMessage> found;
-        if (IsDemo)
-            found = SampleCatalog.Query(SelectedFolder, SelectedAccount, SearchText);
-        else
+        var total = 0;
+        try
         {
-            var list = new List<StoredMessage>();
-            foreach (var account in AccountsInView())
+            if (IsDemo)
             {
-                var folderId = ResolveFolder(account, SelectedFolder);
-                if (account.Mode == AccountMode.Personal)
-                {
-                    var rows = string.IsNullOrWhiteSpace(SearchText)
-                        ? await _services.Store.ListAsync(account.Id, folderId, CancellationToken.None).ConfigureAwait(true)
-                        : await _services.Store.SearchAsync(account.Id, folderId, SearchText, CancellationToken.None).ConfigureAwait(true);
-                    list.AddRange(rows);
-                }
-                else
-                {
-                    var rows = string.IsNullOrWhiteSpace(SearchText)
-                        ? _services.Cache.List(account.Id, folderId)
-                        : _services.Cache.Search(account.Id, folderId, SearchText);
-                    list.AddRange(rows);
-                }
+                found = SampleCatalog.Query(SelectedFolder, SelectedAccount, SearchText);
+                total = searching ? SampleCatalog.Query(SelectedFolder, SelectedAccount, "").Count : found.Count;
             }
+            else
+            {
+                var list = new List<StoredMessage>();
+                foreach (var account in AccountsInView())
+                {
+                    var folderId = ResolveFolder(account, SelectedFolder);
+                    if (account.Mode == AccountMode.Personal)
+                    {
+                        var all = await _services.Store.ListAsync(account.Id, folderId, CancellationToken.None).ConfigureAwait(true);
+                        total += all.Count;
+                        list.AddRange(searching
+                            ? await _services.Store.SearchAsync(account.Id, folderId, SearchText, CancellationToken.None).ConfigureAwait(true)
+                            : all);
+                    }
+                    else
+                    {
+                        var all = _services.Cache.List(account.Id, folderId);
+                        total += all.Count;
+                        list.AddRange(searching ? _services.Cache.Search(account.Id, folderId, SearchText) : all);
+                    }
+                }
 
-            found = list.OrderByDescending(item => item.ReceivedUtc).ToList();
+                found = list.OrderByDescending(item => item.ReceivedUtc).ToList();
+            }
+        }
+        finally
+        {
+            _loadingMessages = false;
         }
 
+        _unfilteredTotal = total;
+        _selectionCount = 0;
         Messages.Clear();
         foreach (var message in found)
             Messages.Add(message);
         SelectMessage(Messages.FirstOrDefault());
         OnPropertyChanged(nameof(Messages));
+        RaiseListState();
+    }
+
+    /// <summary>Called by the list when its selection changes; two or more selected rows are counted in the header.</summary>
+    public void SetSelectionCount(int count)
+    {
+        _selectionCount = count;
+        OnPropertyChanged(nameof(CountText));
+    }
+
+    /// <summary>What the list shows when it has no rows: loading, an empty folder, no search results, or a sync problem.</summary>
+    public string ListState => _loadingMessages && Messages.Count == 0 ? "loading"
+        : Messages.Count > 0 ? "rows"
+        : !string.IsNullOrWhiteSpace(SearchText) ? "nomatch"
+        : Connection is ConnectionState.Error ? "error"
+        : Connection is ConnectionState.Offline ? "offline"
+        : "empty";
+
+    public bool ShowListPlaceholder => ListState != "rows";
+
+    public string EmptyTitle => ListState switch
+    {
+        "loading" => "Loading messages…",
+        "nomatch" => "No messages match your search",
+        "error" => "Sync failed",
+        "offline" => "You are offline",
+        _ => "No messages here",
+    };
+
+    public string EmptyDetail => ListState switch
+    {
+        "loading" => "",
+        "nomatch" => $"Nothing in {SelectedFolder} matches “{SearchText.Trim()}”.",
+        "error" => "Messages could not be loaded. Point at the Sync button for details, or press F5 to try again.",
+        "offline" => "Messages already on this PC show here. Press F5 when you are back online.",
+        _ => $"Messages in {SelectedFolder} appear here.",
+    };
+
+    private void RaiseListState()
+    {
+        OnPropertyChanged(nameof(CountText));
+        OnPropertyChanged(nameof(ListState));
+        OnPropertyChanged(nameof(ShowListPlaceholder));
+        OnPropertyChanged(nameof(EmptyTitle));
+        OnPropertyChanged(nameof(EmptyDetail));
     }
 
     private async Task LoadBodyAsync(StoredMessage message)
@@ -657,7 +719,9 @@ public sealed partial class MainViewModel : ObservableObject
         if (IsDemo)
         {
             Messages.Remove(message);
+            _unfilteredTotal = Math.Max(0, (_unfilteredTotal ?? 1) - 1);
             SelectMessage(Messages.FirstOrDefault());
+            RaiseListState();
             return;
         }
 
@@ -928,7 +992,9 @@ public sealed partial class MainViewModel : ObservableObject
                 AccountChoices.Add(account.DisplayName);
         }
 
-        SelectedAccount = "All accounts";
+        // The last chosen account comes back after a restart, as long as it still exists.
+        var remembered = IsDemo ? null : _services.Config.Layout.MailAccount;
+        SelectedAccount = remembered is not null && AccountChoices.Contains(remembered) ? remembered : "All accounts";
         OnPropertyChanged(nameof(SelectedAccount));
         OnPropertyChanged(nameof(IsAllAccounts));
         OnPropertyChanged(nameof(IsDemo));
@@ -1013,6 +1079,7 @@ public sealed partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ConnectionBrushKey));
         OnPropertyChanged(nameof(SyncToolTip));
         OnPropertyChanged(nameof(SyncAccessName));
+        RaiseListState();
         ConnectionChanged?.Invoke();
     }
 
@@ -1094,6 +1161,37 @@ public sealed partial class MainViewModel : ObservableObject
         mail.FromName = account.DisplayName;
         await _services.Sync.SaveDraftAsync(account, mail, CancellationToken.None).ConfigureAwait(true);
         await ReloadMessagesAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Diagnostics for the reinstall check (--send-check): sends a message from the first manual account to the second,
+    /// then syncs until it arrives (up to about two minutes). Returns a one-line result without addresses or content.
+    /// </summary>
+    public async Task<(bool Ok, string Detail)> RunSendCheckAsync()
+    {
+        var manual = _services.Config.Accounts.Where(account => account.Kind == AccountKind.Manual).ToList();
+        if (manual.Count < 2)
+            return (false, "send-check needs two manual accounts");
+        var (from, to) = (manual[0], manual[1]);
+        var token = "Alondra1 reinstall check " + Guid.NewGuid().ToString("N")[..12];
+        var result = await Send(from, new OutgoingMail { To = [to.Address], Subject = token, TextBody = "Automatic check after a reinstall. You can delete this message." }).ConfigureAwait(true);
+        if (result.Acceptance != SmtpAcceptance.Accepted)
+            return (false, $"send-check: {from.DisplayName} could not send ({result.Acceptance})");
+        for (var attempt = 0; attempt < 12; attempt++)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(attempt == 0 ? 5 : 10)).ConfigureAwait(true);
+            var report = await _services.Sync.SyncAsync(to, CancellationToken.None).ConfigureAwait(true);
+            if (!report.Ok)
+                continue;
+            var inbox = SpecialFolders.Resolve(to, "Inbox");
+            var arrived = to.Mode == AccountMode.Personal
+                ? (await _services.Store.ListAsync(to.Id, inbox, CancellationToken.None).ConfigureAwait(true)).Any(message => message.Subject == token)
+                : _services.Cache.List(to.Id, inbox).Any(message => message.Subject == token);
+            if (arrived)
+                return (true, $"send-check: {from.DisplayName} → {to.DisplayName} received after {attempt + 1} sync(s)");
+        }
+
+        return (false, $"send-check: sent by {from.DisplayName} but not received by {to.DisplayName} in time");
     }
 
     public async Task<SendResult> Send(AccountConfig account, OutgoingMail mail)
@@ -1203,6 +1301,20 @@ public sealed class AppServices
     public Stopwatch Launch { get; } = Stopwatch.StartNew();
 
     public void SaveConfig() => ConfigStore.Save(Config);
+
+    /// <summary>Applies a reviewed import (the Merged or Replaced result of <see cref="ConfigWorkflow.Preview"/>) and saves it.</summary>
+    public void ApplyImported(AppConfig next)
+    {
+        next.DemoMode = Config.DemoMode && next.Accounts.Count == 0;
+        Config.Appearance = next.Appearance;
+        Config.Layout = next.Layout;
+        Config.Reading = next.Reading;
+        Config.OAuth = next.OAuth;
+        Config.Accounts = next.Accounts;
+        Config.SchemaVersion = ConfigSchema.Current;
+        SaveConfig();
+        RefreshOAuth();
+    }
 
     public void RefreshOAuth()
     {

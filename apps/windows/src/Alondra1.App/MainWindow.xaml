@@ -15,6 +15,14 @@
         PreviewKeyDown="Window_PreviewKeyDown" SizeChanged="Window_SizeChanged">
   <Window.Resources>
     <app:FolderIconConverter x:Key="FolderIcon"/>
+    <!-- Unread messages: heavier sender and subject (together with the dot, so unread never relies on color). -->
+    <Style x:Key="UnreadText" TargetType="TextBlock">
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding IsUnread}" Value="True">
+          <Setter Property="FontWeight" Value="SemiBold"/>
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
   </Window.Resources>
   <Border BorderBrush="{DynamicResource LineBrush}" BorderThickness="1" Background="{DynamicResource ChromeBrush}" CornerRadius="14">
     <!-- Shell rows (docs/UI-DESIGN.md → Spacing contract): header 56, gap 8, toolbar 48, gap 8, content.
@@ -165,24 +173,24 @@
                   <TextBlock Text="New" Margin="6,0,0,0" VerticalAlignment="Center" Visibility="{Binding ShowNewLabel, Converter={StaticResource BoolVis}}"/>
                 </StackPanel>
               </Button>
-              <Button Style="{StaticResource IconButton}" Command="{Binding ReplyCommand}" AutomationProperties.Name="Reply" ToolTip="Reply (Ctrl+R)">
+              <Button Style="{StaticResource IconButton}" Command="{Binding ReplyCommand}" ui:ActionHint.WhenDisabled="Select a message first" AutomationProperties.Name="Reply" ToolTip="Reply (Ctrl+R)">
                 <ui:Alondra1Icon Kind="Reply" IconSize="18"/>
               </Button>
               <StackPanel Orientation="Horizontal" Visibility="{Binding ShowSecondaryMailActions, Converter={StaticResource BoolVis}}">
-                <Button Style="{StaticResource IconButton}" Command="{Binding ReplyAllCommand}" AutomationProperties.Name="Reply all" ToolTip="Reply all">
+                <Button Style="{StaticResource IconButton}" Command="{Binding ReplyAllCommand}" ui:ActionHint.WhenDisabled="Select a message first" AutomationProperties.Name="Reply all" ToolTip="Reply all">
                   <ui:Alondra1Icon Kind="ReplyAll" IconSize="18"/>
                 </Button>
-                <Button Style="{StaticResource IconButton}" Command="{Binding ForwardCommand}" AutomationProperties.Name="Forward" ToolTip="Forward (Ctrl+Shift+F)">
+                <Button Style="{StaticResource IconButton}" Command="{Binding ForwardCommand}" ui:ActionHint.WhenDisabled="Select a message first" AutomationProperties.Name="Forward" ToolTip="Forward (Ctrl+Shift+F)">
                   <ui:Alondra1Icon Kind="Forward" IconSize="18"/>
                 </Button>
-                <Button Style="{StaticResource IconButton}" Command="{Binding ArchiveCommand}" AutomationProperties.Name="Archive" ToolTip="Archive">
+                <Button Style="{StaticResource IconButton}" Command="{Binding ArchiveCommand}" ui:ActionHint.WhenDisabled="Select a message first" AutomationProperties.Name="Archive" ToolTip="Archive">
                   <ui:Alondra1Icon Kind="Archive" IconSize="18"/>
                 </Button>
               </StackPanel>
-              <Button Style="{StaticResource IconButton}" Command="{Binding DeleteCommand}" AutomationProperties.Name="Delete" ToolTip="Delete (Del)">
+              <Button Style="{StaticResource DangerIconButton}" Command="{Binding DeleteCommand}" ui:ActionHint.WhenDisabled="Select a message first" AutomationProperties.Name="Delete" ToolTip="Delete (Del)">
                 <ui:Alondra1Icon Kind="Delete" IconSize="18"/>
               </Button>
-              <Button Style="{StaticResource IconButton}" Command="{Binding ToggleReadCommand}" AutomationProperties.Name="{Binding ReadToggleLabel}" ToolTip="{Binding ReadToggleLabel}"
+              <Button Style="{StaticResource IconButton}" Command="{Binding ToggleReadCommand}" ui:ActionHint.WhenDisabled="Select a message first" AutomationProperties.Name="{Binding ReadToggleLabel}" ToolTip="{Binding ReadToggleLabel}"
                       Visibility="{Binding ShowSecondaryMailActions, Converter={StaticResource BoolVis}}">
                 <ui:Alondra1Icon Kind="{Binding ReadToggleIcon}" IconSize="18"/>
               </Button>
@@ -338,7 +346,8 @@
                           Visibility="{Binding ShowFolderCombo, Converter={StaticResource BoolVis}}"
                           SelectionChanged="HiddenFolderBox_SelectionChanged"/>
                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-                  <TextBlock Text="{Binding VisibleCountText}" FontSize="11" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center"/>
+                  <TextBlock x:Name="MessageCountText" Text="{Binding CountText}" FontSize="11" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center"
+                             AutomationProperties.Name="{Binding CountText}" AutomationProperties.LiveSetting="Polite"/>
                 </StackPanel>
               </Grid>
               <Border x:Name="ListColumnHeader" DockPanel.Dock="Top" Height="{StaticResource MailTableHeaderHeight}" Margin="{StaticResource PaneSectionGapTop}"
@@ -377,9 +386,14 @@
                       <Setter Property="Height" Value="{Binding DataContext.RowHeight, RelativeSource={RelativeSource AncestorType=Window}}"/>
                       <Setter Property="Template">
                         <Setter.Value>
+                          <!-- Row states: hover = soft surface; selected = selected surface plus a 3 px accent edge (so selection
+                               never depends on color alone and differs from unread, which is a dot plus heavier text). -->
                           <ControlTemplate TargetType="ListBoxItem">
                             <Border x:Name="Bd" Background="Transparent" BorderBrush="{DynamicResource LineBrush}" BorderThickness="0,0,0,1" CornerRadius="0" SnapsToDevicePixels="True">
-                              <ContentPresenter/>
+                              <Grid>
+                                <Border x:Name="Edge" Width="3" HorizontalAlignment="Left" Margin="0,5" CornerRadius="1.5" Background="{DynamicResource BrandBrush}" Visibility="Collapsed"/>
+                                <ContentPresenter/>
+                              </Grid>
                             </Border>
                             <ControlTemplate.Triggers>
                               <Trigger Property="IsMouseOver" Value="True">
@@ -391,6 +405,7 @@
                                 <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SelectedBrush}"/>
                                 <Setter TargetName="Bd" Property="CornerRadius" Value="{StaticResource RadiusTip}"/>
                                 <Setter TargetName="Bd" Property="BorderThickness" Value="0"/>
+                                <Setter TargetName="Edge" Property="Visibility" Value="Visible"/>
                               </Trigger>
                             </ControlTemplate.Triggers>
                           </ControlTemplate>
@@ -404,32 +419,24 @@
                             ui:MailColumns.Apply="True">
                         <Ellipse Width="7" Height="7" Fill="{DynamicResource BrandBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"
                                  Visibility="{Binding IsUnread, Converter={StaticResource BoolVis}}"/>
-                        <TextBlock Grid.Column="1" Text="{Binding FromName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,8,0"/>
-                        <TextBlock Grid.Column="2" Text="{Binding Subject}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center">
-                          <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                              <Style.Triggers>
-                                <DataTrigger Binding="{Binding IsUnread}" Value="True">
-                                  <Setter Property="FontWeight" Value="SemiBold"/>
-                                </DataTrigger>
-                              </Style.Triggers>
-                            </Style>
-                          </TextBlock.Style>
-                        </TextBlock>
+                        <TextBlock Grid.Column="1" Text="{Binding FromName}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,8,0"
+                                   Style="{StaticResource UnreadText}" ToolTip="{Binding FromAddress}"/>
+                        <TextBlock Grid.Column="2" Text="{Binding Subject}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="0,0,8,0"
+                                   Style="{StaticResource UnreadText}"/>
                         <ui:Alondra1Icon Grid.Column="3" Kind="Attachment" IconSize="14" Foreground="{DynamicResource MutedBrush}" VerticalAlignment="Center"
                                           Visibility="{Binding HasAttachments, Converter={StaticResource BoolVis}}"/>
                         <TextBlock Grid.Column="4" Text="{Binding TimeLabel}" FontSize="11" Foreground="{DynamicResource MutedBrush}"
-                                   HorizontalAlignment="Right" VerticalAlignment="Center"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular"
                                    Visibility="{Binding DataContext.ShowTimeColumn, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolVis}}"/>
                       </Grid>
                     </DataTemplate>
                   </ListBox.ItemTemplate>
                 </ListBox>
-                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False"
-                            Visibility="{Binding Messages.Count, Converter={StaticResource ZeroVis}}">
+                <StackPanel x:Name="ListPlaceholder" VerticalAlignment="Center" HorizontalAlignment="Center" IsHitTestVisible="False" MaxWidth="320"
+                            Visibility="{Binding ShowListPlaceholder, Converter={StaticResource BoolVis}}">
                   <ui:Alondra1Icon Kind="Inbox" IconSize="32" Foreground="{DynamicResource MutedBrush}" HorizontalAlignment="Center" Opacity="0.7"/>
-                  <TextBlock Text="No messages here" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,8,0,2"/>
-                  <TextBlock Text="Messages in this folder appear here." Foreground="{DynamicResource MutedBrush}" HorizontalAlignment="Center"/>
+                  <TextBlock Text="{Binding EmptyTitle}" FontWeight="SemiBold" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="0,8,0,2"/>
+                  <TextBlock Text="{Binding EmptyDetail}" Foreground="{DynamicResource MutedBrush}" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"/>
                 </StackPanel>
               </Grid>
             </DockPanel>

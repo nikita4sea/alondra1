@@ -13,6 +13,7 @@ public partial class App : Application
     private async void OnStartup(object sender, StartupEventArgs e)
     {
         Arguments = e.Args;
+        Alondra1.Mail.MimeHeaders.EnsureCharsets();
         ShutdownMode = ShutdownMode.OnMainWindowClose;
         DispatcherUnhandledException += (_, args) =>
         {
@@ -46,6 +47,18 @@ public partial class App : Application
         }
 
         Services.Config.DemoMode = demo;
+        // Unattended setup (milestone reinstall check). With --exit and nothing else to show, the app stops here.
+        if (!demo && CommandLineSetup.Requested(Arguments))
+        {
+            var code = await CommandLineSetup.RunAsync(Services, Arguments);
+            var showWindow = Arguments.Any(argument => argument is "--sync" or "--perf" || argument.StartsWith("--snapshot=", StringComparison.Ordinal));
+            if (code != 0 || (Arguments.Contains("--exit") && !showWindow))
+            {
+                Shutdown(code);
+                return;
+            }
+        }
+
         // Diagnostics for demo runs: --theme=light|dark overrides the theme for this session only.
         if (demo && Arguments.FirstOrDefault(argument => argument.StartsWith("--theme=", StringComparison.Ordinal)) is { } theme
             && Enum.TryParse<ThemePreference>(theme["--theme=".Length..], ignoreCase: true, out var forced))

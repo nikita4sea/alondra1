@@ -48,15 +48,36 @@ public partial class MainWindow : Window
             FillSelectors();
             UpdateStatusDot();
             WriteLaunchLog();
-            // Diagnostics: --sync syncs every account once at start (before a --snapshot), as F5 would.
+            // Diagnostics: --account=<name> picks the Mail account; --sync syncs every account once at start (before a
+            // --snapshot), as F5 would; --send-check sends between the first two manual accounts. Results go to logs\check.log.
+            if (App.Arguments.FirstOrDefault(argument => argument.StartsWith("--account=", StringComparison.Ordinal)) is { } chosen)
+            {
+                _model.SetAccount(chosen["--account=".Length..]);
+                FillSelectors();
+            }
+
             if (App.Arguments.Contains("--sync") && !model.IsDemo)
             {
                 await model.SyncAsync();
                 UpdateStatusDot();
+                var ok = model.Connection == ConnectionState.Ready;
+                WriteCheck($"sync: {(ok ? "ok" : "failed")} · {model.ConnectionLabel} · {model.StatusText.Replace('\n', ';')} · {model.CountText}");
+                if (!ok)
+                    _exitCode = 4;
+            }
+
+            if (App.Arguments.Contains("--send-check") && !model.IsDemo)
+            {
+                var (ok, detail) = await model.RunSendCheckAsync();
+                WriteCheck((ok ? "ok " : "failed ") + detail);
+                if (!ok)
+                    _exitCode = 5;
             }
 
             if (App.Arguments.Contains("--perf"))
                 await RunPerfAsync();
+            else if (App.Arguments.Contains("--exit") && !App.Arguments.Any(argument => argument.StartsWith("--snapshot=", StringComparison.Ordinal)))
+                ExitAfterDiagnostics();
             else if (App.Arguments.FirstOrDefault(argument => argument.StartsWith("--snapshot=", StringComparison.Ordinal)) is { } snapshot)
                 await SnapshotAsync(snapshot["--snapshot=".Length..]);
             else if (model.Config.Accounts.Count == 0 && !model.IsDemo && !App.Arguments.Contains("--demo"))
@@ -131,6 +152,30 @@ public partial class MainWindow : Window
     private void UpdateStatusDot() => StatusDot.SetResourceReference(Shape.FillProperty, _model.ConnectionBrushKey);
 
     private void Window_SizeChanged(object sender, SizeChangedEventArgs e) => _model.RememberShellWidth(e.NewSize.Width);
+
+    private int _exitCode;
+
+    /// <summary>Closes the app for --exit runs, with a non-zero exit code when a diagnostic check failed.</summary>
+    private void ExitAfterDiagnostics()
+    {
+        if (_exitCode == 0)
+            Close();
+        else
+            Application.Current.Shutdown(_exitCode);
+    }
+
+    private static void WriteCheck(string line)
+    {
+        try
+        {
+            var directory = Path.Combine(App.Services.Home, "logs");
+            Directory.CreateDirectory(directory);
+            File.AppendAllText(Path.Combine(directory, "check.log"), $"{DateTimeOffset.Now:O} {line}{Environment.NewLine}");
+        }
+        catch (IOException)
+        {
+        }
+    }
 
     private void WriteLaunchLog()
     {
@@ -240,11 +285,12 @@ public partial class MainWindow : Window
         else
         {
             Shell.Snapshot.RenderElement((FrameworkElement)Content, path);
-            File.WriteAllText(path + ".txt", $"header {Header.ActualHeight:0} toolbar {Toolbar.ActualHeight:0} window {ActualWidth:0}x{ActualHeight:0}; {Shell.Snapshot.Measure(this)}");
+            File.WriteAllText(path + ".txt", $"header {Header.ActualHeight:0} toolbar {Toolbar.ActualHeight:0} window {ActualWidth:0}x{ActualHeight:0}; {Shell.Snapshot.Measure(this)}"
+                + $"{Environment.NewLine}account={_model.SelectedAccount}{Environment.NewLine}count={_model.CountText}{Environment.NewLine}connection={_model.ConnectionLabel}");
         }
 
         if (App.Arguments.Contains("--exit"))
-            Close();
+            ExitAfterDiagnostics();
     }
 
     private static ScrollViewer? FindScrollViewer(DependencyObject root)
@@ -513,9 +559,15 @@ public partial class MainWindow : Window
         var bar = FindScrollViewer(MessageList)?.ComputedVerticalScrollBarVisibility == Visibility.Visible
             ? FindVerticalScrollBar(MessageList)?.ActualWidth ?? 0
             : 0;
-        if (ListColumnHeader.Child is FrameworkElement columns && Math.Abs(columns.Margin.Right - bar) > 0.1)
-            columns.Margin = new Thickness(0, 0, bar, 0);
+        // With a scroll bar, rows keep 6 px of breathing room before it so it never touches the dates.
+        var breathing = bar > 0 ? ScrollBarBreathing : 0;
+        if (Math.Abs(MessageList.Padding.Right - breathing) > 0.1)
+            MessageList.Padding = new Thickness(0, 0, breathing, 0);
+        if (ListColumnHeader.Child is FrameworkElement columns && Math.Abs(columns.Margin.Right - (bar + breathing)) > 0.1)
+            columns.Margin = new Thickness(0, 0, bar + breathing, 0);
     }
+
+    private const double ScrollBarBreathing = 6;
 
     private static System.Windows.Controls.Primitives.ScrollBar? FindVerticalScrollBar(DependencyObject root)
     {

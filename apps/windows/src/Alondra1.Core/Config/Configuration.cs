@@ -52,6 +52,7 @@ public sealed class AppConfig
     public int SchemaVersion { get; set; } = ConfigSchema.Current;
     public AppearanceSettings Appearance { get; set; } = new();
     public LayoutSettings Layout { get; set; } = new();
+    public ReadingSettings Reading { get; set; } = new();
     public OAuthClientSettings OAuth { get; set; } = new();
     public List<AccountConfig> Accounts { get; set; } = [];
     public bool DemoMode { get; set; }
@@ -68,6 +69,21 @@ public sealed class AppearanceSettings
     public bool GroupTasksByFolder { get; set; }
     public BackgroundSettings Background { get; set; } = new();
 }
+
+/// <summary>How messages are shown in the reader (Settings → Mail). Local to this PC; never contains secrets.</summary>
+public sealed class ReadingSettings
+{
+    /// <summary>Open the HTML version of a message when it has one (default), or the plain text.</summary>
+    public bool PreferHtml { get; set; } = true;
+
+    /// <summary>Remote images: ask before loading (default) or always load. There is no image proxy, so loading reveals the PC's address to the image host.</summary>
+    public RemoteImagePolicy RemoteImages { get; set; } = RemoteImagePolicy.Ask;
+
+    /// <summary>Senders (addresses, lower case) whose remote images always load.</summary>
+    public List<string> TrustedSenders { get; set; } = [];
+}
+
+public enum RemoteImagePolicy { Ask, Always }
 
 public enum BackgroundFit { Cover, Contain }
 
@@ -215,6 +231,9 @@ public sealed class LayoutSettings
     public double FolderBreadthBand { get; set; } = 52;
     public double ReadingBreadthSide { get; set; } = 330;
     public double ReadingBreadthBand { get; set; } = 174;
+
+    /// <summary>The account shown in Mail (display name), or null for All accounts. Restored at the next start.</summary>
+    public string? MailAccount { get; set; }
 }
 
 public sealed class OAuthClientSettings
@@ -415,6 +434,16 @@ public static class ConfigWorkflow
             errors.Add("Pane sizes must be between 40 and 2000.");
         }
 
+        config.Reading ??= new ReadingSettings();
+        config.Reading.TrustedSenders ??= [];
+        if (config.Reading.TrustedSenders.Count > 1000)
+            errors.Add("At most 1000 trusted senders are allowed.");
+        foreach (var sender in config.Reading.TrustedSenders)
+        {
+            if (string.IsNullOrWhiteSpace(sender) || !sender.Contains('@') || sender.Contains(' ') || sender.Length > 320)
+                errors.Add($"Trusted sender '{sender}' is not a valid address.");
+        }
+
         if (!IsTenant(config.OAuth.MicrosoftTenant))
             errors.Add("Microsoft tenant must be common, organizations, consumers, or a directory id.");
         if (!IsClientId(config.OAuth.MicrosoftClientId, microsoft: true))
@@ -521,6 +550,8 @@ public static class ConfigWorkflow
             merged.Appearance = Clone(incoming).Appearance;
         if (incoming.Layout is not null)
             merged.Layout = Clone(incoming).Layout;
+        if (incoming.Reading is not null)
+            merged.Reading = Clone(incoming).Reading;
         merged.OAuth = Clone(incoming).OAuth;
         merged.SchemaVersion = ConfigSchema.Current;
 

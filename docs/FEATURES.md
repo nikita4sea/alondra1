@@ -28,6 +28,7 @@ What Alondra1 1.3.0 does today, by workspace. Each workspace has a keyboard shor
 - A Sync button (F5) in the toolbar that also shows the connection status: a colored dot, a label on wide windows, and the details of every account in its tooltip.
 - Inbox, Sent, Drafts, Archive, and Trash as toolbar tabs (Ctrl+Shift+1 … 5).
 - A compact list with unread marks and an attachment indicator, plus a reading pane showing sender, account, and time.
+- A message count that always matches the list ("24 messages", "5 of 24 messages" while searching) and an explanation when the list is empty (no search results, offline, sync failed).
 - Message bodies are shown as clean plain text. Scripts and remote content are never loaded.
 - Search follows the selected account and folder. Personal accounts use a full-text index (tested with 10,000 messages).
 - Sync on demand with F5 or More → Sync now. The status dot shows Up to date, Syncing…, Offline, Sync failed, Sample data, or No accounts.
